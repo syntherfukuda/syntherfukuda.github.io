@@ -555,10 +555,14 @@
 
     let db = null;
 
+    // デフォルトの初期マスターデータ
+    const defaultCategories = ['電動工具', '手工具', '測定工具', '切削工具', 'その他'];
+    const defaultLocations = ['A棚-01', 'A棚-02', 'B棚-01', 'ラックC', '保管庫D'];
+
     // アプリケーション状態変数
     window.isDetailedMode = false;
-    window.categories = ['電動工具', '手工具', '測定工具', '切削工具', 'その他'];
-    window.locations = ['A棚-01', 'A棚-02', 'B棚-01', 'ラックC', '保管庫D'];
+    window.categories = [...defaultCategories];
+    window.locations = [...defaultLocations];
     window.tools = [];
     window.historyLogs = [];
     window.userProfile = { deviceId: '', userName: '' };
@@ -581,6 +585,38 @@
       try {
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
+
+        // カテゴリマスターのリアルタイム監視
+        onSnapshot(doc(db, "settings", "categories"), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+            window.categories = docSnap.data().items;
+          } else {
+            // Firestoreにデータがまだない場合はシードデータを作成
+            setDoc(doc(db, "settings", "categories"), { items: defaultCategories });
+            window.categories = [...defaultCategories];
+          }
+          localStorage.setItem('tool_nav_categories_v3', JSON.stringify(window.categories));
+          populateCategoryDropdowns();
+          renderCategoryTable();
+        }, (error) => {
+          console.error("Categories Listener Error:", error);
+        });
+
+        // 保管場所マスターのリアルタイム監視
+        onSnapshot(doc(db, "settings", "locations"), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+            window.locations = docSnap.data().items;
+          } else {
+            // Firestoreにデータがまだない場合はシードデータを作成
+            setDoc(doc(db, "settings", "locations"), { items: defaultLocations });
+            window.locations = [...defaultLocations];
+          }
+          localStorage.setItem('tool_nav_locations_v3', JSON.stringify(window.locations));
+          populateLocationDropdowns();
+          renderLocationTable();
+        }, (error) => {
+          console.error("Locations Listener Error:", error);
+        });
 
         // 工具コレクションのリアルタイム監視
         onSnapshot(collection(db, "tools"), (snapshot) => {
@@ -658,6 +694,8 @@
     }
 
     function loadFallbackData() {
+      window.categories = JSON.parse(localStorage.getItem('tool_nav_categories_v3')) || [...defaultCategories];
+      window.locations = JSON.parse(localStorage.getItem('tool_nav_locations_v3')) || [...defaultLocations];
       window.tools = JSON.parse(localStorage.getItem('tool_nav_tools_v3')) || [];
       window.historyLogs = JSON.parse(localStorage.getItem('tool_nav_history_v3')) || [];
       populateCategoryDropdowns();
@@ -708,6 +746,28 @@
         localStorage.setItem('tool_nav_tools_v3', JSON.stringify(window.tools));
         renderTools();
         renderQrManager();
+      }
+    };
+
+    window.dbSaveCategories = async function(categoriesList) {
+      if (db) {
+        await setDoc(doc(db, "settings", "categories"), { items: categoriesList });
+      } else {
+        localStorage.setItem('tool_nav_categories_v3', JSON.stringify(categoriesList));
+        window.categories = categoriesList;
+        populateCategoryDropdowns();
+        renderCategoryTable();
+      }
+    };
+
+    window.dbSaveLocations = async function(locationsList) {
+      if (db) {
+        await setDoc(doc(db, "settings", "locations"), { items: locationsList });
+      } else {
+        localStorage.setItem('tool_nav_locations_v3', JSON.stringify(locationsList));
+        window.locations = locationsList;
+        populateLocationDropdowns();
+        renderLocationTable();
       }
     };
 
@@ -813,16 +873,29 @@
       const newToolCat = document.getElementById('new-tool-category');
       const qrFilterCat = document.getElementById('qr-filter-category');
 
+      const currentFilterVal = filterCat ? filterCat.value : 'all';
+      const currentNewToolVal = newToolCat ? newToolCat.value : '';
+      const currentQrFilterVal = qrFilterCat ? qrFilterCat.value : 'all';
+
       if (filterCat) {
         filterCat.innerHTML = '<option value="all">すべてのカテゴリ</option>' + 
           window.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        if (window.categories.includes(currentFilterVal) || currentFilterVal === 'all') {
+          filterCat.value = currentFilterVal;
+        }
       }
       if (newToolCat) {
         newToolCat.innerHTML = window.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        if (window.categories.includes(currentNewToolVal)) {
+          newToolCat.value = currentNewToolVal;
+        }
       }
       if (qrFilterCat) {
         qrFilterCat.innerHTML = '<option value="all">すべてのカテゴリ</option>' + 
           window.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        if (window.categories.includes(currentQrFilterVal) || currentQrFilterVal === 'all') {
+          qrFilterCat.value = currentQrFilterVal;
+        }
       }
     }
 
@@ -831,16 +904,29 @@
       const newToolLoc = document.getElementById('new-tool-location');
       const qrFilterLoc = document.getElementById('qr-filter-location');
 
+      const currentFilterVal = filterLoc ? filterLoc.value : 'all';
+      const currentNewToolVal = newToolLoc ? newToolLoc.value : '';
+      const currentQrFilterVal = qrFilterLoc ? qrFilterLoc.value : 'all';
+
       if (filterLoc) {
         filterLoc.innerHTML = '<option value="all">すべての保管場所</option>' + 
           window.locations.map(l => `<option value="${l}">${l}</option>`).join('');
+        if (window.locations.includes(currentFilterVal) || currentFilterVal === 'all') {
+          filterLoc.value = currentFilterVal;
+        }
       }
       if (newToolLoc) {
         newToolLoc.innerHTML = window.locations.map(l => `<option value="${l}">${l}</option>`).join('');
+        if (window.locations.includes(currentNewToolVal)) {
+          newToolLoc.value = currentNewToolVal;
+        }
       }
       if (qrFilterLoc) {
         qrFilterLoc.innerHTML = '<option value="all">すべての保管場所</option>' + 
           window.locations.map(l => `<option value="${l}">${l}</option>`).join('');
+        if (window.locations.includes(currentQrFilterVal) || currentQrFilterVal === 'all') {
+          qrFilterLoc.value = currentQrFilterVal;
+        }
       }
     }
 
@@ -1396,16 +1482,17 @@
       showToast(`工具 [${name}] をクラウドDBに追加しました！`, 'success');
     }
 
-    function handleAddCategory(e) {
+    async function handleAddCategory(e) {
       e.preventDefault();
       const val = document.getElementById('new-category-input').value.trim();
       if (!val) return;
       if (window.categories.includes(val)) return showToast('既に存在します。', 'warning');
-      window.categories.push(val);
-      populateCategoryDropdowns();
-      renderCategoryTable();
+      
+      const newCategories = [...window.categories, val];
+      await window.dbSaveCategories(newCategories);
+
       document.getElementById('new-category-input').value = '';
-      showToast(`カテゴリ [${val}] を追加しました。`, 'success');
+      showToast(`カテゴリ [${val}] を追加・全端末に同期しました。`, 'success');
     }
 
     function renderCategoryTable() {
@@ -1425,24 +1512,24 @@
     }
 
     function deleteCategory(catName) {
-      showConfirmModal('カテゴリ削除', `カテゴリ [${catName}] を削除しますか？`, () => {
-        window.categories = window.categories.filter(c => c !== catName);
-        populateCategoryDropdowns();
-        renderCategoryTable();
+      showConfirmModal('カテゴリ削除', `カテゴリ [${catName}] を削除しますか？`, async () => {
+        const newCategories = window.categories.filter(c => c !== catName);
+        await window.dbSaveCategories(newCategories);
         showToast('カテゴリを削除しました。', 'info');
       });
     }
 
-    function handleAddLocation(e) {
+    async function handleAddLocation(e) {
       e.preventDefault();
       const val = document.getElementById('new-location-input').value.trim();
       if (!val) return;
       if (window.locations.includes(val)) return showToast('既に存在します。', 'warning');
-      window.locations.push(val);
-      populateLocationDropdowns();
-      renderLocationTable();
+
+      const newLocations = [...window.locations, val];
+      await window.dbSaveLocations(newLocations);
+
       document.getElementById('new-location-input').value = '';
-      showToast(`保管場所 [${val}] を追加しました。`, 'success');
+      showToast(`保管場所 [${val}] を追加・全端末に同期しました。`, 'success');
     }
 
     function renderLocationTable() {
@@ -1462,10 +1549,9 @@
     }
 
     function deleteLocation(locName) {
-      showConfirmModal('保管場所削除', `保管場所 [${locName}] を削除しますか？`, () => {
-        window.locations = window.locations.filter(l => l !== locName);
-        populateLocationDropdowns();
-        renderLocationTable();
+      showConfirmModal('保管場所削除', `保管場所 [${locName}] を削除しますか？`, async () => {
+        const newLocations = window.locations.filter(l => l !== locName);
+        await window.dbSaveLocations(newLocations);
         showToast('保管場所を削除しました。', 'info');
       });
     }
