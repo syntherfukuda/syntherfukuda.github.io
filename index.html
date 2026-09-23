@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>工具貸借ツール - かんたん＆詳細切り替え対応</title>
+  <title>工具貸借ナビ - Firebaseリアルタイム同期版</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -42,13 +42,22 @@
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen pb-20">
 
-  <header class="bg-blue-600 text-white shadow-md sticky top-0 z-30">
+  <!-- 接続状態インジケーター -->
+  <div id="sync-status-bar" class="bg-amber-500 text-white text-[11px] font-bold py-1 px-4 text-center sticky top-0 z-40 flex items-center justify-center gap-2">
+    <i class="fa-solid fa-spinner fa-spin" id="sync-icon"></i>
+    <span id="sync-status-text">Firebaseに接続中... (設定情報を確認してください)</span>
+  </div>
+
+  <header class="bg-blue-600 text-white shadow-md sticky top-[25px] z-30">
     <div class="max-w-5xl mx-auto px-4 py-2.5 flex justify-between items-center flex-wrap gap-2">
       <div class="flex items-center space-x-2">
         <i class="fa-solid fa-toolbox text-xl text-yellow-300"></i>
         <div>
-          <h1 class="font-bold text-base md:text-lg leading-tight">工具貸借ツール</h1>
-          <p class="text-[10px] text-blue-200 hidden sm:block">スマホでQRを読むだけ</p>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-base md:text-lg leading-tight">工具貸借ナビ</h1>
+            <span class="bg-emerald-500 text-white text-[9px] px-1.5 py-0.2 rounded font-bold">クラウド同期</span>
+          </div>
+          <p class="text-[10px] text-blue-200 hidden sm:block">スマホでQRを読むだけで自動判定・可視化</p>
         </div>
       </div>
       
@@ -69,7 +78,7 @@
     </div>
   </header>
 
-  <div id="toast-container" class="fixed top-16 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+  <div id="toast-container" class="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
   <main class="max-w-5xl mx-auto px-2 sm:px-4 py-4">
 
@@ -96,6 +105,7 @@
       </button>
     </div>
 
+    <!-- 全体管理表タブ -->
     <section id="tab-dashboard" class="space-y-4">
       <div class="bg-white p-3.5 rounded-xl shadow-sm space-y-3">
         <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
@@ -145,6 +155,7 @@
       <div id="tools-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
     </section>
 
+    <!-- 工具登録/QR発行タブ -->
     <section id="tab-addtool" class="hidden space-y-4">
       <div class="bg-white p-4 rounded-xl shadow-sm">
         <h2 class="font-bold text-slate-800 mb-3 flex items-center gap-2">
@@ -189,7 +200,7 @@
           </div>
 
           <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition shadow">
-            工具を登録する
+            クラウドデータベースに工具を登録する
           </button>
         </form>
       </div>
@@ -225,6 +236,7 @@
       </div>
     </section>
 
+    <!-- カテゴリ・場所設定タブ -->
     <section id="tab-categories" class="hidden space-y-4">
       <div class="bg-white p-4 rounded-xl shadow-sm">
         <h2 class="font-bold text-slate-800 mb-1 flex items-center gap-2">
@@ -271,6 +283,7 @@
       </div>
     </section>
 
+    <!-- 履歴・端末タブ -->
     <section id="tab-history" class="hidden space-y-4">
       <div class="bg-white p-4 rounded-xl shadow-sm">
         <div class="flex justify-between items-start mb-2">
@@ -294,9 +307,8 @@
       <div class="bg-white p-4 rounded-xl shadow-sm">
         <div class="flex justify-between items-center mb-3">
           <h2 class="font-bold text-slate-800 flex items-center gap-2">
-            <i class="fa-solid fa-clock-rotate-left text-blue-600"></i> 貸出・返却履歴ログ
+            <i class="fa-solid fa-clock-rotate-left text-blue-600"></i> 全端末共通 貸出・返却履歴ログ
           </h2>
-          <button onclick="clearHistory()" class="text-xs text-red-500 hover:text-red-700">履歴消去</button>
         </div>
         <div id="history-list" class="space-y-2 max-h-[500px] overflow-y-auto pr-1"></div>
       </div>
@@ -304,6 +316,7 @@
 
   </main>
 
+  <!-- 各種モーダルダイアログ -->
   <div id="user-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
       <h3 class="font-bold text-slate-800 text-base mb-1 flex items-center gap-2">
@@ -522,30 +535,150 @@
 
   <div id="print-area" class="p-8 hidden"></div>
 
-  <script>
-    let isDetailedMode = false;
-    let categories = [];
-    let locations = [];
-    let tools = [];
-    let historyLogs = [];
-    let userProfile = { deviceId: '', userName: '' };
+  <!-- Firebase SDK (ES Module) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getFirestore, collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, limit 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    let currentStatusFilter = 'all';
-    let selectedToolForEdit = null;
-    let currentScannedTool = null;
-    let confirmCallback = null;
+    // =========================================================================
+    // ★【重要】ステップ3で取得したFirebaseの設定情報を以下に貼り付けてください
+    // =========================================================================
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
-    function initApp() {
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyAH6P9k3H4dh6ywOyAnvYoRNgPQmjfB8pk",
+  authDomain: "toolrent-45139.firebaseapp.com",
+  projectId: "toolrent-45139",
+  storageBucket: "toolrent-45139.firebasestorage.app",
+  messagingSenderId: "917641822890",
+  appId: "1:917641822890:web:38c2902a801e8c514586d3",
+  measurementId: "G-6Y4JPGSZG4"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+    let db;
+    let isConnected = false;
+
+    // アプリケーション状態変数
+    window.isDetailedMode = false;
+    window.categories = ['電動工具', '手工具', '測定工具', '切削工具', 'その他'];
+    window.locations = ['A棚-01', 'A棚-02', 'B棚-01', 'ラックC', '保管庫D'];
+    window.tools = [];
+    window.historyLogs = [];
+    window.userProfile = { deviceId: '', userName: '' };
+
+    window.currentStatusFilter = 'all';
+    window.selectedToolForEdit = null;
+    window.currentScannedTool = null;
+    window.confirmCallback = null;
+
+    // 初期化処理
+    async function initFirebaseApp() {
       loadUserProfile();
-      loadData();
+
+      // Firebase設定が書き換えられているか簡易チェック
+      if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.projectId) {
+        updateSyncBanner(false, "Firebase設定未完了：コード内の firebaseConfig を更新してください");
+        loadFallbackData();
+        return;
+      }
+
+      try {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+
+        // 工具コレクションのリアルタイム監視
+        onSnapshot(collection(db, "tools"), (snapshot) => {
+          updateSyncBanner(true, "Firebase リアルタイム接続中 (自動更新)");
+          window.tools = [];
+          snapshot.forEach((docSnap) => {
+            window.tools.push({ id: docSnap.id, ...docSnap.data() });
+          });
+
+          // 初回でDBが空の場合は初期サンプルデータを送信
+          if (snapshot.empty) {
+            seedInitialTools();
+          }
+
+          populateCategoryDropdowns();
+          populateLocationDropdowns();
+          renderTools();
+          renderQrManager();
+          renderCategoryTable();
+          renderLocationTable();
+          checkUrlParameters();
+        }, (error) => {
+          console.error("Firestore Listener Error:", error);
+          updateSyncBanner(false, "Firebase通信エラー：セキュリティルール等を確認してください");
+        });
+
+        // 履歴コレクションのリアルタイム監視
+        const historyQuery = query(collection(db, "history"), orderBy("timestamp", "desc"), limit(50));
+        onSnapshot(historyQuery, (snapshot) => {
+          window.historyLogs = [];
+          snapshot.forEach((docSnap) => {
+            window.historyLogs.push(docSnap.data());
+          });
+          renderHistory();
+        });
+
+      } catch (e) {
+        console.error("Firebase Initialize Error:", e);
+        updateSyncBanner(false, "Firebase初期化失敗");
+        loadFallbackData();
+      }
+    }
+
+    function updateSyncBanner(connected, text) {
+      const bar = document.getElementById('sync-status-bar');
+      const icon = document.getElementById('sync-icon');
+      const textEl = document.getElementById('sync-status-text');
+
+      if (!bar) return;
+      textEl.innerText = text;
+
+      if (connected) {
+        bar.className = "bg-emerald-600 text-white text-[11px] font-bold py-1 px-4 text-center sticky top-0 z-40 flex items-center justify-center gap-2";
+        icon.className = "fa-solid fa-wifi";
+      } else {
+        bar.className = "bg-amber-600 text-white text-[11px] font-bold py-1 px-4 text-center sticky top-0 z-40 flex items-center justify-center gap-2";
+        icon.className = "fa-solid fa-triangle-exclamation";
+      }
+    }
+
+    // 初回データ作成
+    async function seedInitialTools() {
+      const initialTools = [
+        { id: 'TL-A01-DRV18V', name: '充電式インパクトドライバ 18V', maker: 'マキタ', model: 'TD172DRGX', category: '電動工具', location: 'A棚-01', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' },
+        { id: 'TL-A02-MTR100', name: 'デジタルノギス 150mm', maker: 'ミツトヨ', model: 'CD-15AX', category: '測定工具', location: 'A棚-02', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' }
+      ];
+
+      for (const t of initialTools) {
+        await setDoc(doc(db, "tools", t.id), t);
+      }
+    }
+
+    function loadFallbackData() {
+      window.tools = JSON.parse(localStorage.getItem('tool_nav_tools_v3')) || [];
+      window.historyLogs = JSON.parse(localStorage.getItem('tool_nav_history_v3')) || [];
       populateCategoryDropdowns();
       populateLocationDropdowns();
       renderTools();
+      renderQrManager();
       renderCategoryTable();
       renderLocationTable();
       renderHistory();
-      renderQrManager();
-      updateViewModeUI();
       checkUrlParameters();
     }
 
@@ -557,21 +690,59 @@
       }
 
       let savedName = localStorage.getItem('tool_nav_user_name_v3') || `作業員-${savedId.slice(-4)}`;
-      userProfile = { deviceId: savedId, userName: savedName };
+      window.userProfile = { deviceId: savedId, userName: savedName };
 
       const headerNameEl = document.getElementById('header-user-name');
-      if (headerNameEl) headerNameEl.innerText = userProfile.userName;
+      if (headerNameEl) headerNameEl.innerText = window.userProfile.userName;
 
       const tabUserEl = document.getElementById('tab-history-username');
-      if (tabUserEl) tabUserEl.innerText = userProfile.userName;
+      if (tabUserEl) tabUserEl.innerText = window.userProfile.userName;
 
       const tabDevEl = document.getElementById('tab-history-deviceid');
-      if (tabDevEl) tabDevEl.innerText = userProfile.deviceId;
+      if (tabDevEl) tabDevEl.innerText = window.userProfile.deviceId;
     }
 
+    // データベース書き込みヘルパー（Firebaseが使えない場合はlocalStorageFallback）
+    window.dbSaveTool = async function(tool) {
+      if (db) {
+        await setDoc(doc(db, "tools", tool.id), tool, { merge: true });
+      } else {
+        localStorage.setItem('tool_nav_tools_v3', JSON.stringify(window.tools));
+        renderTools();
+      }
+    };
+
+    window.dbDeleteTool = async function(toolId) {
+      if (db) {
+        await deleteDoc(doc(db, "tools", toolId));
+      } else {
+        window.tools = window.tools.filter(t => t.id !== toolId);
+        localStorage.setItem('tool_nav_tools_v3', JSON.stringify(window.tools));
+        renderTools();
+        renderQrManager();
+      }
+    };
+
+    window.dbAddHistory = async function(logEntry) {
+      logEntry.id = Date.now();
+      if (db) {
+        await setDoc(doc(db, "history", String(logEntry.id)), logEntry);
+      } else {
+        window.historyLogs.unshift(logEntry);
+        localStorage.setItem('tool_nav_history_v3', JSON.stringify(window.historyLogs));
+        renderHistory();
+      }
+    };
+
+    // Firebase初期化の実行
+    window.addEventListener('DOMContentLoaded', initFirebaseApp);
+  </script>
+
+  <!-- アプリ基本操作JavaScript -->
+  <script>
     function openUserModal() {
-      document.getElementById('user-modal-name').value = userProfile.userName;
-      document.getElementById('user-modal-deviceid').innerText = userProfile.deviceId;
+      document.getElementById('user-modal-name').value = window.userProfile.userName;
+      document.getElementById('user-modal-deviceid').innerText = window.userProfile.deviceId;
       document.getElementById('user-modal').classList.remove('hidden');
     }
 
@@ -584,16 +755,18 @@
       const newName = document.getElementById('user-modal-name').value.trim();
       if (!newName) return;
 
-      userProfile.userName = newName;
+      window.userProfile.userName = newName;
       localStorage.setItem('tool_nav_user_name_v3', newName);
 
-      loadUserProfile();
+      document.getElementById('header-user-name').innerText = window.userProfile.userName;
+      document.getElementById('tab-history-username').innerText = window.userProfile.userName;
+
       closeUserModal();
       showToast('使用者名を保存しました。', 'success');
     }
 
     function toggleViewMode() {
-      isDetailedMode = !isDetailedMode;
+      window.isDetailedMode = !window.isDetailedMode;
       updateViewModeUI();
       renderTools();
     }
@@ -605,7 +778,7 @@
       const description = document.getElementById('mode-description');
       const tabNav = document.getElementById('main-tab-nav');
 
-      if (isDetailedMode) {
+      if (window.isDetailedMode) {
         if (modeLabel) modeLabel.innerText = "かんたん画面へ";
         if (modeIcon) modeIcon.className = "fa-solid fa-border-all text-yellow-300";
         if (badgeTag) {
@@ -647,37 +820,6 @@
       else if (tabName === 'history') renderHistory();
     }
 
-    function loadData() {
-      const defaultCategories = ['電動工具', '手工具', '測定工具', '切削工具', 'その他'];
-      const defaultLocations = ['A棚-01', 'A棚-02', 'B棚-01', 'ラックC', '保管庫D'];
-      const defaultTools = [
-        { id: 'TL-A01-DRV18V', name: '充電式インパクトドライバ 18V', maker: 'マキタ', model: 'TD172DRGX', category: '電動工具', location: 'A棚-01', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' },
-        { id: 'TL-A02-MTR100', name: 'デジタルノギス 150mm', maker: 'ミツトヨ', model: 'CD-15AX', category: '測定工具', location: 'A棚-02', isBorrowed: true, status: 'borrowed', borrowedBy: 'SP-883210', borrowedByName: '鈴木 (現場B)', borrowedAt: '2026/09/20 09:15', returnDate: '2026/09/25', note: '2F 電気配線点検' },
-        { id: 'TL-B01-WRN12P', name: 'メガネレンチセット (12本組)', maker: 'KTC', model: 'TM512', category: '手工具', location: 'B棚-01', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' }
-      ];
-
-      categories = JSON.parse(localStorage.getItem('tool_nav_categories_v3')) || defaultCategories;
-      locations = JSON.parse(localStorage.getItem('tool_nav_locations_v3')) || defaultLocations;
-      tools = JSON.parse(localStorage.getItem('tool_nav_tools_v3')) || defaultTools;
-      
-      tools.forEach(t => {
-        if (!t.status) {
-          t.status = t.isBorrowed ? 'borrowed' : 'available';
-        }
-        if (t.maker === undefined) t.maker = '';
-        if (t.model === undefined) t.model = '';
-      });
-
-      historyLogs = JSON.parse(localStorage.getItem('tool_nav_history_v3')) || [];
-    }
-
-    function saveData() {
-      localStorage.setItem('tool_nav_categories_v3', JSON.stringify(categories));
-      localStorage.setItem('tool_nav_locations_v3', JSON.stringify(locations));
-      localStorage.setItem('tool_nav_tools_v3', JSON.stringify(tools));
-      localStorage.setItem('tool_nav_history_v3', JSON.stringify(historyLogs));
-    }
-
     function populateCategoryDropdowns() {
       const filterCat = document.getElementById('filter-category');
       const newToolCat = document.getElementById('new-tool-category');
@@ -685,14 +827,14 @@
 
       if (filterCat) {
         filterCat.innerHTML = '<option value="all">すべてのカテゴリ</option>' + 
-          categories.map(c => `<option value="${c}">${c}</option>`).join('');
+          window.categories.map(c => `<option value="${c}">${c}</option>`).join('');
       }
       if (newToolCat) {
-        newToolCat.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        newToolCat.innerHTML = window.categories.map(c => `<option value="${c}">${c}</option>`).join('');
       }
       if (qrFilterCat) {
         qrFilterCat.innerHTML = '<option value="all">すべてのカテゴリ</option>' + 
-          categories.map(c => `<option value="${c}">${c}</option>`).join('');
+          window.categories.map(c => `<option value="${c}">${c}</option>`).join('');
       }
     }
 
@@ -703,14 +845,14 @@
 
       if (filterLoc) {
         filterLoc.innerHTML = '<option value="all">すべての保管場所</option>' + 
-          locations.map(l => `<option value="${l}">${l}</option>`).join('');
+          window.locations.map(l => `<option value="${l}">${l}</option>`).join('');
       }
       if (newToolLoc) {
-        newToolLoc.innerHTML = locations.map(l => `<option value="${l}">${l}</option>`).join('');
+        newToolLoc.innerHTML = window.locations.map(l => `<option value="${l}">${l}</option>`).join('');
       }
       if (qrFilterLoc) {
         qrFilterLoc.innerHTML = '<option value="all">すべての保管場所</option>' + 
-          locations.map(l => `<option value="${l}">${l}</option>`).join('');
+          window.locations.map(l => `<option value="${l}">${l}</option>`).join('');
       }
     }
 
@@ -744,9 +886,7 @@
       if (cleanName && (!cleanModel || !cleanModel.includes(cleanName))) codeParts.push(cleanName);
 
       let mainCode = codeParts.join('-');
-      if (!mainCode) {
-        mainCode = 'TOOL';
-      }
+      if (!mainCode) mainCode = 'TOOL';
 
       const randomSuffix = Math.floor(100 + Math.random() * 900);
       idInput.value = `TL-${cleanLoc}-${mainCode.slice(0, 16)}-${randomSuffix}`;
@@ -757,11 +897,11 @@
       const toolId = urlParams.get('tool');
       if (!toolId) return;
 
-      const matchedTool = tools.find(t => t.id === toolId);
+      const matchedTool = window.tools.find(t => t.id === toolId);
       if (matchedTool) {
-        currentScannedTool = matchedTool;
+        window.currentScannedTool = matchedTool;
         openQrChoiceModal(matchedTool);
-      } else {
+      } else if (window.tools.length > 0) {
         showToast(`該当する工具 (ID: ${toolId}) が見つかりませんでした。`, 'warning');
       }
 
@@ -795,10 +935,10 @@
     }
 
     function handleQrChoiceBorrowReturn() {
-      if (!currentScannedTool) return;
+      if (!window.currentScannedTool) return;
       closeQrChoiceModal();
 
-      const tool = currentScannedTool;
+      const tool = window.currentScannedTool;
 
       if (tool.status === 'damaged' || tool.status === 'lost') {
         const statusText = tool.status === 'damaged' ? '破損・修理中' : '紛失';
@@ -815,15 +955,15 @@
     }
 
     function handleQrChoiceSearch() {
-      if (!currentScannedTool) return;
+      if (!window.currentScannedTool) return;
       closeQrChoiceModal();
-      showStatusDetailModal(currentScannedTool);
+      showStatusDetailModal(window.currentScannedTool);
     }
 
     function checkBorrowerPermission(tool) {
       if (!tool.isBorrowed) return true;
       
-      if (tool.borrowedBy && tool.borrowedBy !== userProfile.deviceId) {
+      if (tool.borrowedBy && tool.borrowedBy !== window.userProfile.deviceId) {
         const borrowerName = tool.borrowedByName || '他の作業員';
         showConfirmModal(
           '⚠️ 返却制限の確認',
@@ -837,21 +977,18 @@
       return true;
     }
 
-    function executeBorrowAction(tool) {
+    async function executeBorrowAction(tool) {
       const now = new Date();
       const formattedDate = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
 
       tool.isBorrowed = true;
       tool.status = 'borrowed';
-      tool.borrowedBy = userProfile.deviceId;
-      tool.borrowedByName = userProfile.userName;
+      tool.borrowedBy = window.userProfile.deviceId;
+      tool.borrowedByName = window.userProfile.userName;
       tool.borrowedAt = formattedDate;
 
-      logHistory({ toolName: tool.name, action: 'borrow', userName: userProfile.userName, deviceId: userProfile.deviceId, timestamp: formattedDate });
-
-      saveData();
-      renderTools();
-      renderHistory();
+      await window.dbSaveTool(tool);
+      await window.dbAddHistory({ toolName: tool.name, action: 'borrow', userName: window.userProfile.userName, deviceId: window.userProfile.deviceId, timestamp: formattedDate });
 
       const modal = document.getElementById('quick-result-modal');
       const iconContainer = document.getElementById('quick-result-icon-container');
@@ -865,14 +1002,14 @@
 
       document.getElementById('quick-result-tool-name').innerText = tool.name;
       document.getElementById('quick-result-tool-id').innerText = `ID: ${tool.id}`;
-      document.getElementById('quick-result-user').innerText = `${userProfile.userName} (${userProfile.deviceId})`;
+      document.getElementById('quick-result-user').innerText = `${window.userProfile.userName} (${window.userProfile.deviceId})`;
       document.getElementById('quick-result-location').innerText = tool.location || '未指定';
       document.getElementById('quick-result-time').innerText = formattedDate;
 
       modal.classList.remove('hidden');
     }
 
-    function executeReturnAction(tool) {
+    async function executeReturnAction(tool) {
       const now = new Date();
       const formattedDate = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
 
@@ -883,11 +1020,8 @@
       tool.borrowedAt = null;
       tool.returnDate = null;
 
-      logHistory({ toolName: tool.name, action: 'return', userName: userProfile.userName, deviceId: userProfile.deviceId, timestamp: formattedDate });
-
-      saveData();
-      renderTools();
-      renderHistory();
+      await window.dbSaveTool(tool);
+      await window.dbAddHistory({ toolName: tool.name, action: 'return', userName: window.userProfile.userName, deviceId: window.userProfile.deviceId, timestamp: formattedDate });
 
       const modal = document.getElementById('quick-result-modal');
       const iconContainer = document.getElementById('quick-result-icon-container');
@@ -901,7 +1035,7 @@
 
       document.getElementById('quick-result-tool-name').innerText = tool.name;
       document.getElementById('quick-result-tool-id').innerText = `ID: ${tool.id}`;
-      document.getElementById('quick-result-user').innerText = `${userProfile.userName} (${userProfile.deviceId})`;
+      document.getElementById('quick-result-user').innerText = `${window.userProfile.userName} (${window.userProfile.deviceId})`;
       document.getElementById('quick-result-location').innerText = tool.location || '未指定';
       document.getElementById('quick-result-time').innerText = formattedDate;
 
@@ -950,7 +1084,7 @@
         actionBtn.innerText = "使用不可 (紛失)";
         actionBtn.className = "flex-1 bg-slate-300 text-slate-500 py-2.5 rounded-xl text-xs font-bold cursor-not-allowed";
       } else if (tool.isBorrowed) {
-        const isSelf = tool.borrowedBy === userProfile.deviceId;
+        const isSelf = tool.borrowedBy === window.userProfile.deviceId;
         statusBox.className = "p-3 rounded-xl text-xs space-y-2 border bg-amber-50 border-amber-200 text-amber-900";
         statusBox.innerHTML = `
           <div class="flex justify-between font-bold border-b border-amber-200 pb-1.5 text-amber-800">
@@ -992,22 +1126,22 @@
     }
 
     function switchToBorrowActionFromDetail() {
-      if (!currentScannedTool) return;
+      if (!window.currentScannedTool) return;
       closeStatusDetailModal();
-      if (currentScannedTool.status === 'damaged' || currentScannedTool.status === 'lost') {
+      if (window.currentScannedTool.status === 'damaged' || window.currentScannedTool.status === 'lost') {
         showToast('この工具は現在利用できません。', 'warning');
         return;
       }
-      if (!currentScannedTool.isBorrowed) {
-        executeBorrowAction(currentScannedTool);
+      if (!window.currentScannedTool.isBorrowed) {
+        executeBorrowAction(window.currentScannedTool);
       } else {
-        if (!checkBorrowerPermission(currentScannedTool)) return;
-        executeReturnAction(currentScannedTool);
+        if (!checkBorrowerPermission(window.currentScannedTool)) return;
+        executeReturnAction(window.currentScannedTool);
       }
     }
 
     function setStatusFilter(filter) {
-      currentStatusFilter = filter;
+      window.currentStatusFilter = filter;
       ['all', 'borrowed', 'available', 'trouble'].forEach(f => {
         const btn = document.getElementById(`filter-status-${f}`);
         if (btn) {
@@ -1029,18 +1163,18 @@
       let availableCount = 0;
       let troubleCount = 0;
 
-      tools.forEach(t => {
+      window.tools.forEach(t => {
         if (t.status === 'damaged' || t.status === 'lost') troubleCount++;
         else if (t.isBorrowed) borrowedCount++;
         else availableCount++;
       });
 
-      document.getElementById('metric-total').innerText = tools.length;
+      document.getElementById('metric-total').innerText = window.tools.length;
       document.getElementById('metric-borrowed').innerText = borrowedCount;
       document.getElementById('metric-available').innerText = availableCount;
       document.getElementById('metric-trouble').innerText = troubleCount;
 
-      const filtered = tools.filter(tool => {
+      const filtered = window.tools.filter(tool => {
         const matchesSearch = tool.name.toLowerCase().includes(searchQuery) || 
           tool.id.toLowerCase().includes(searchQuery) ||
           (tool.maker && tool.maker.toLowerCase().includes(searchQuery)) ||
@@ -1050,9 +1184,9 @@
         const matchesLocation = locationFilter === 'all' || tool.location === locationFilter;
         
         let matchesStatus = true;
-        if (currentStatusFilter === 'borrowed') matchesStatus = tool.isBorrowed && tool.status === 'borrowed';
-        else if (currentStatusFilter === 'available') matchesStatus = !tool.isBorrowed && tool.status === 'available';
-        else if (currentStatusFilter === 'trouble') matchesStatus = (tool.status === 'damaged' || tool.status === 'lost');
+        if (window.currentStatusFilter === 'borrowed') matchesStatus = tool.isBorrowed && tool.status === 'borrowed';
+        else if (window.currentStatusFilter === 'available') matchesStatus = !tool.isBorrowed && tool.status === 'available';
+        else if (window.currentStatusFilter === 'trouble') matchesStatus = (tool.status === 'damaged' || tool.status === 'lost');
 
         return matchesSearch && matchesCategory && matchesLocation && matchesStatus;
       });
@@ -1069,7 +1203,7 @@
       }
 
       filtered.forEach(tool => {
-        const isSelf = tool.borrowedBy === userProfile.deviceId;
+        const isSelf = tool.borrowedBy === window.userProfile.deviceId;
         const isTrouble = tool.status === 'damaged' || tool.status === 'lost';
         
         let statusBadge = '';
@@ -1150,7 +1284,7 @@
     }
 
     function toggleToolStatus(toolId) {
-      const tool = tools.find(t => t.id === toolId);
+      const tool = window.tools.find(t => t.id === toolId);
       if (!tool) return;
 
       if (tool.status === 'damaged' || tool.status === 'lost') {
@@ -1171,9 +1305,9 @@
     }
 
     function openEditDetailsModal(toolId) {
-      const tool = tools.find(t => t.id === toolId);
+      const tool = window.tools.find(t => t.id === toolId);
       if (!tool) return;
-      selectedToolForEdit = tool;
+      window.selectedToolForEdit = tool;
       
       document.getElementById('edit-modal-tool-name').innerText = `${tool.name} (${tool.id})`;
       document.getElementById('edit-return-date').value = tool.returnDate || '';
@@ -1183,25 +1317,24 @@
 
     function closeEditDetailsModal() {
       document.getElementById('edit-details-modal').classList.add('hidden');
-      selectedToolForEdit = null;
+      window.selectedToolForEdit = null;
     }
 
-    function saveToolDetails() {
-      if (!selectedToolForEdit) return;
+    async function saveToolDetails() {
+      if (!window.selectedToolForEdit) return;
       
-      selectedToolForEdit.returnDate = document.getElementById('edit-return-date').value || null;
-      selectedToolForEdit.note = document.getElementById('edit-note').value.trim();
+      window.selectedToolForEdit.returnDate = document.getElementById('edit-return-date').value || null;
+      window.selectedToolForEdit.note = document.getElementById('edit-note').value.trim();
       
-      saveData();
-      renderTools();
+      await window.dbSaveTool(window.selectedToolForEdit);
       closeEditDetailsModal();
       showToast('工具のメモ・返却予定日を更新しました。', 'success');
     }
 
     function openTroubleModal(toolId) {
-      const tool = tools.find(t => t.id === toolId);
+      const tool = window.tools.find(t => t.id === toolId);
       if (!tool) return;
-      selectedToolForEdit = tool;
+      window.selectedToolForEdit = tool;
 
       document.getElementById('trouble-modal-tool-name').innerText = `${tool.name} (${tool.id})`;
       document.getElementById('trouble-modal').classList.remove('hidden');
@@ -1209,20 +1342,20 @@
 
     function openTroubleModalFromDetail() {
       closeStatusDetailModal();
-      if (currentScannedTool) {
-        openTroubleModal(currentScannedTool.id);
+      if (window.currentScannedTool) {
+        openTroubleModal(window.currentScannedTool.id);
       }
     }
 
     function closeTroubleModal() {
       document.getElementById('trouble-modal').classList.add('hidden');
-      selectedToolForEdit = null;
+      window.selectedToolForEdit = null;
     }
 
-    function setToolTroubleStatus(newStatus) {
-      if (!selectedToolForEdit) return;
+    async function setToolTroubleStatus(newStatus) {
+      if (!window.selectedToolForEdit) return;
 
-      const tool = selectedToolForEdit;
+      const tool = window.selectedToolForEdit;
       tool.status = newStatus;
 
       if (newStatus === 'damaged' || newStatus === 'lost') {
@@ -1236,8 +1369,7 @@
         tool.borrowedByName = null;
       }
 
-      saveData();
-      renderTools();
+      await window.dbSaveTool(tool);
       closeTroubleModal();
 
       const labelMap = { damaged: '破損・修理中', lost: '紛失', available: '保管中（復旧）' };
@@ -1245,21 +1377,16 @@
     }
 
     function deleteTool(toolId) {
-      const tool = tools.find(t => t.id === toolId);
+      const tool = window.tools.find(t => t.id === toolId);
       if (!tool) return;
 
-      showConfirmModal('工具の削除', `工具 [${tool.name}] を削除しますか？`, () => {
-        tools = tools.filter(t => t.id !== toolId);
-        saveData();
-        renderTools();
-        renderQrManager();
-        renderCategoryTable();
-        renderLocationTable();
+      showConfirmModal('工具の削除', `工具 [${tool.name}] を削除しますか？`, async () => {
+        await window.dbDeleteTool(toolId);
         showToast('工具を削除しました。', 'info');
       });
     }
 
-    function handleAddTool(e) {
+    async function handleAddTool(e) {
       e.preventDefault();
       const name = document.getElementById('new-tool-name').value.trim();
       const maker = document.getElementById('new-tool-maker')?.value.trim() || '';
@@ -1268,30 +1395,25 @@
       const category = document.getElementById('new-tool-category').value;
       const location = document.getElementById('new-tool-location').value;
 
-      if (tools.some(t => t.id === id)) {
+      if (window.tools.some(t => t.id === id)) {
         showToast('その工具IDは既に登録されています。', 'warning');
         return;
       }
 
-      tools.push({ id, name, maker, model, category: category || 'その他', location: location || '未指定', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' });
-      saveData();
-      renderTools();
-      renderQrManager();
-      renderCategoryTable();
-      renderLocationTable();
+      const newTool = { id, name, maker, model, category: category || 'その他', location: location || '未指定', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' };
+      await window.dbSaveTool(newTool);
 
       document.getElementById('add-tool-form').reset();
       autoGenerateToolId();
-      showToast(`工具 [${name}] を追加しました！`, 'success');
+      showToast(`工具 [${name}] をクラウドDBに追加しました！`, 'success');
     }
 
     function handleAddCategory(e) {
       e.preventDefault();
       const val = document.getElementById('new-category-input').value.trim();
       if (!val) return;
-      if (categories.includes(val)) return showToast('既に存在します。', 'warning');
-      categories.push(val);
-      saveData();
+      if (window.categories.includes(val)) return showToast('既に存在します。', 'warning');
+      window.categories.push(val);
       populateCategoryDropdowns();
       renderCategoryTable();
       document.getElementById('new-category-input').value = '';
@@ -1302,8 +1424,8 @@
       const tbody = document.getElementById('category-table-body');
       if (!tbody) return;
       tbody.innerHTML = '';
-      categories.forEach(cat => {
-        const count = tools.filter(t => t.category === cat).length;
+      window.categories.forEach(cat => {
+        const count = window.tools.filter(t => t.category === cat).length;
         tbody.insertAdjacentHTML('beforeend', `
           <tr>
             <td class="p-3 font-bold text-slate-800">${cat}</td>
@@ -1316,12 +1438,9 @@
 
     function deleteCategory(catName) {
       showConfirmModal('カテゴリ削除', `カテゴリ [${catName}] を削除しますか？`, () => {
-        categories = categories.filter(c => c !== catName);
-        tools.forEach(t => { if (t.category === catName) t.category = 'その他'; });
-        saveData();
+        window.categories = window.categories.filter(c => c !== catName);
         populateCategoryDropdowns();
         renderCategoryTable();
-        renderTools();
         showToast('カテゴリを削除しました。', 'info');
       });
     }
@@ -1330,9 +1449,8 @@
       e.preventDefault();
       const val = document.getElementById('new-location-input').value.trim();
       if (!val) return;
-      if (locations.includes(val)) return showToast('既に存在します。', 'warning');
-      locations.push(val);
-      saveData();
+      if (window.locations.includes(val)) return showToast('既に存在します。', 'warning');
+      window.locations.push(val);
       populateLocationDropdowns();
       renderLocationTable();
       document.getElementById('new-location-input').value = '';
@@ -1343,8 +1461,8 @@
       const tbody = document.getElementById('location-table-body');
       if (!tbody) return;
       tbody.innerHTML = '';
-      locations.forEach(loc => {
-        const count = tools.filter(t => t.location === loc).length;
+      window.locations.forEach(loc => {
+        const count = window.tools.filter(t => t.location === loc).length;
         tbody.insertAdjacentHTML('beforeend', `
           <tr>
             <td class="p-3 font-bold text-slate-800">${loc}</td>
@@ -1357,12 +1475,9 @@
 
     function deleteLocation(locName) {
       showConfirmModal('保管場所削除', `保管場所 [${locName}] を削除しますか？`, () => {
-        locations = locations.filter(l => l !== locName);
-        tools.forEach(t => { if (t.location === locName) t.location = '未指定'; });
-        saveData();
+        window.locations = window.locations.filter(l => l !== locName);
         populateLocationDropdowns();
         renderLocationTable();
-        renderTools();
         showToast('保管場所を削除しました。', 'info');
       });
     }
@@ -1376,7 +1491,7 @@
       const selectedCategory = document.getElementById('qr-filter-category')?.value || 'all';
       const selectedLocation = document.getElementById('qr-filter-location')?.value || 'all';
 
-      const filtered = tools.filter(tool => {
+      const filtered = window.tools.filter(tool => {
         const matchesCat = selectedCategory === 'all' || tool.category === selectedCategory;
         const matchesLoc = selectedLocation === 'all' || tool.location === selectedLocation;
         const matchesSearch = tool.name.toLowerCase().includes(searchQuery) ||
@@ -1438,18 +1553,12 @@
       });
     }
 
-    function logHistory(logEntry) {
-      logEntry.id = Date.now();
-      historyLogs.unshift(logEntry);
-      if (historyLogs.length > 50) historyLogs.pop();
-    }
-
     function renderHistory() {
       const container = document.getElementById('history-list');
       if (!container) return;
-      container.innerHTML = historyLogs.length === 0 ? '<div class="text-slate-400 text-xs text-center py-6">操作履歴はありません</div>' : '';
+      container.innerHTML = window.historyLogs.length === 0 ? '<div class="text-slate-400 text-xs text-center py-6">操作履歴はありません</div>' : '';
 
-      historyLogs.forEach(log => {
+      window.historyLogs.forEach(log => {
         const isBorrow = log.action === 'borrow';
         container.insertAdjacentHTML('beforeend', `
           <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
@@ -1468,15 +1577,6 @@
             </div>
           </div>
         `);
-      });
-    }
-
-    function clearHistory() {
-      showConfirmModal('履歴消去', '履歴ログをすべて消去しますか？', () => {
-        historyLogs = [];
-        saveData();
-        renderHistory();
-        showToast('履歴を消去しました。', 'info');
       });
     }
 
@@ -1517,11 +1617,11 @@
     function showConfirmModal(title, message, onOk) {
       document.getElementById('confirm-modal-title').innerText = title;
       document.getElementById('confirm-modal-message').innerText = message;
-      confirmCallback = onOk;
+      window.confirmCallback = onOk;
 
       const okBtn = document.getElementById('confirm-modal-ok');
       okBtn.onclick = () => {
-        if (confirmCallback) confirmCallback();
+        if (window.confirmCallback) window.confirmCallback();
         closeConfirmModal();
       };
 
@@ -1530,12 +1630,8 @@
 
     function closeConfirmModal() {
       document.getElementById('confirm-modal').classList.add('hidden');
-      confirmCallback = null;
+      window.confirmCallback = null;
     }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      initApp();
-    });
   </script>
 </body>
 </html>
