@@ -539,36 +539,21 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { 
-      getFirestore, collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, limit 
+      getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, orderBy, limit 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // =========================================================================
-    // ★【重要】ステップ3で取得したFirebaseの設定情報を以下に貼り付けてください
-    // =========================================================================
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+    // Firebaseの設定情報
+    const firebaseConfig = {
+      apiKey: "AIzaSyAH6P9k3H4dh6ywOyAnvYoRNgPQmjfB8pk",
+      authDomain: "toolrent-45139.firebaseapp.com",
+      projectId: "toolrent-45139",
+      storageBucket: "toolrent-45139.firebasestorage.app",
+      messagingSenderId: "917641822890",
+      appId: "1:917641822890:web:38c2902a801e8c514586d3",
+      measurementId: "G-6Y4JPGSZG4"
+    };
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAH6P9k3H4dh6ywOyAnvYoRNgPQmjfB8pk",
-  authDomain: "toolrent-45139.firebaseapp.com",
-  projectId: "toolrent-45139",
-  storageBucket: "toolrent-45139.firebasestorage.app",
-  messagingSenderId: "917641822890",
-  appId: "1:917641822890:web:38c2902a801e8c514586d3",
-  measurementId: "G-6Y4JPGSZG4"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-
-    let db;
-    let isConnected = false;
+    let db = null;
 
     // アプリケーション状態変数
     window.isDetailedMode = false;
@@ -587,9 +572,8 @@ const analytics = getAnalytics(app);
     async function initFirebaseApp() {
       loadUserProfile();
 
-      // Firebase設定が書き換えられているか簡易チェック
-      if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.projectId) {
-        updateSyncBanner(false, "Firebase設定未完了：コード内の firebaseConfig を更新してください");
+      if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+        updateSyncBanner(false, "Firebase設定未完了：firebaseConfig を確認してください");
         loadFallbackData();
         return;
       }
@@ -620,7 +604,8 @@ const analytics = getAnalytics(app);
           checkUrlParameters();
         }, (error) => {
           console.error("Firestore Listener Error:", error);
-          updateSyncBanner(false, "Firebase通信エラー：セキュリティルール等を確認してください");
+          updateSyncBanner(false, "Firebase通信エラー：Firestoreルール・設定を確認してください");
+          loadFallbackData();
         });
 
         // 履歴コレクションのリアルタイム監視
@@ -631,6 +616,8 @@ const analytics = getAnalytics(app);
             window.historyLogs.push(docSnap.data());
           });
           renderHistory();
+        }, (error) => {
+          console.error("History Listener Error:", error);
         });
 
       } catch (e) {
@@ -659,6 +646,7 @@ const analytics = getAnalytics(app);
 
     // 初回データ作成
     async function seedInitialTools() {
+      if (!db) return;
       const initialTools = [
         { id: 'TL-A01-DRV18V', name: '充電式インパクトドライバ 18V', maker: 'マキタ', model: 'TD172DRGX', category: '電動工具', location: 'A棚-01', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' },
         { id: 'TL-A02-MTR100', name: 'デジタルノギス 150mm', maker: 'ミツトヨ', model: 'CD-15AX', category: '測定工具', location: 'A棚-02', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' }
