@@ -1,0 +1,1542 @@
+<%@ Page Language="C#" %>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>工具貸借ツール - かんたん＆詳細切り替え対応</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style>
+    .tab-active {
+      border-bottom: 3px solid #2563eb;
+      color: #2563eb;
+      font-weight: 700;
+      background-color: #eff6ff;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #print-area, #print-area * {
+        visibility: visible;
+      }
+      #print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen pb-20">
+
+  <header class="bg-blue-600 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 py-2.5 flex justify-between items-center flex-wrap gap-2">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-toolbox text-xl text-yellow-300"></i>
+        <div>
+          <h1 class="font-bold text-base md:text-lg leading-tight">工具貸借ツール</h1>
+          <p class="text-[10px] text-blue-200 hidden sm:block">スマホでQRを読むだけ</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center space-x-2">
+        <button onclick="toggleViewMode()" id="mode-toggle-btn" class="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-xs px-3 py-1.5 rounded-full transition border border-blue-400 font-medium">
+          <i id="mode-icon" class="fa-solid fa-wand-magic-sparkles text-yellow-300"></i>
+          <span id="mode-label">詳細画面へ</span>
+        </button>
+
+        <button onclick="openUserModal()" class="flex items-center space-x-1.5 bg-blue-700 hover:bg-blue-800 text-xs px-3 py-1.5 rounded-full transition border border-blue-400">
+          <i class="fa-solid fa-mobile-screen-button text-yellow-300"></i>
+          <div class="text-left">
+            <div id="header-user-name" class="font-bold truncate max-w-[90px] sm:max-w-[120px]">未設定</div>
+          </div>
+          <i class="fa-solid fa-pen text-[10px] opacity-70"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="toast-container" class="fixed top-16 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <main class="max-w-5xl mx-auto px-2 sm:px-4 py-4">
+
+    <div id="mode-indicator-banner" class="mb-3 bg-blue-50 border border-blue-200 rounded-xl p-2.5 flex justify-between items-center text-xs text-blue-800">
+      <div class="flex items-center gap-2">
+        <span id="mode-badge-tag" class="bg-blue-600 text-white font-bold px-2 py-0.5 rounded text-[10px]">かんたん表示</span>
+        <span id="mode-description">現場向け：全体管理表のみを表示中（ワンタップで貸出・返却）</span>
+      </div>
+      <button onclick="toggleViewMode()" class="text-blue-600 font-bold underline text-[11px] hover:text-blue-800">切り替え</button>
+    </div>
+
+    <div id="main-tab-nav" class="hidden flex overflow-x-auto border-b border-slate-300 mb-4 bg-white rounded-xl shadow-sm no-scrollbar">
+      <button id="tab-btn-dashboard" onclick="switchTab('dashboard')" class="tab-active flex-1 min-w-[100px] py-3 px-2 text-center text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-center gap-1 font-bold text-blue-600">
+        <i class="fa-solid fa-boxes-stacked text-lg"></i> <span>全体管理表</span>
+      </button>
+      <button id="tab-btn-addtool" onclick="switchTab('addtool')" class="flex-1 min-w-[100px] py-3 px-2 text-center text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-500 hover:text-slate-700">
+        <i class="fa-solid fa-circle-plus"></i> <span>工具登録/QR発行</span>
+      </button>
+      <button id="tab-btn-categories" onclick="switchTab('categories')" class="flex-1 min-w-[100px] py-3 px-2 text-center text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-500 hover:text-slate-700">
+        <i class="fa-solid fa-tags text-purple-600"></i> <span>カテゴリ・場所</span>
+      </button>
+      <button id="tab-btn-history" onclick="switchTab('history')" class="flex-1 min-w-[100px] py-3 px-2 text-center text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-500 hover:text-slate-700">
+        <i class="fa-solid fa-clock-rotate-left"></i> <span>履歴・端末</span>
+      </button>
+    </div>
+
+    <section id="tab-dashboard" class="space-y-4">
+      <div class="bg-white p-3.5 rounded-xl shadow-sm space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+          <div class="relative sm:col-span-4">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+            <input type="text" id="search-input" oninput="renderTools()" placeholder="工具名・ID・使用者で検索..." class="w-full pl-9 pr-3 py-1.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <div class="sm:col-span-3">
+            <select id="filter-category" onchange="renderTools()" class="w-full py-1.5 px-3 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+            </select>
+          </div>
+
+          <div class="sm:col-span-2">
+            <select id="filter-location" onchange="renderTools()" class="w-full py-1.5 px-3 text-xs sm:text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+            </select>
+          </div>
+
+          <div class="sm:col-span-3 flex gap-1 text-xs">
+            <button onclick="setStatusFilter('all')" id="filter-status-all" class="flex-1 py-1.5 rounded-lg bg-blue-600 text-white font-medium shadow-sm">すべて</button>
+            <button onclick="setStatusFilter('borrowed')" id="filter-status-borrowed" class="flex-1 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-medium">貸出中</button>
+            <button onclick="setStatusFilter('available')" id="filter-status-available" class="flex-1 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-medium">保管中</button>
+            <button onclick="setStatusFilter('trouble')" id="filter-status-trouble" class="flex-1 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-medium text-red-600">破損/紛失</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-1.5 text-center text-xs pt-2 border-t border-slate-100">
+          <div class="bg-slate-50 py-1.5 rounded-lg border border-slate-100">
+            <span class="text-slate-500 text-[10px] block">総工具数</span>
+            <span id="metric-total" class="text-sm sm:text-base font-extrabold text-slate-800">0</span>
+          </div>
+          <div class="bg-amber-50 py-1.5 rounded-lg border border-amber-200">
+            <span class="text-amber-700 text-[10px] block">貸出中</span>
+            <span id="metric-borrowed" class="text-sm sm:text-base font-extrabold text-amber-600">0</span>
+          </div>
+          <div class="bg-emerald-50 py-1.5 rounded-lg border border-emerald-200">
+            <span class="text-emerald-700 text-[10px] block">保管中</span>
+            <span id="metric-available" class="text-sm sm:text-base font-extrabold text-emerald-600">0</span>
+          </div>
+          <div class="bg-rose-50 py-1.5 rounded-lg border border-rose-200">
+            <span class="text-rose-700 text-[10px] block">破損/紛失</span>
+            <span id="metric-trouble" class="text-sm sm:text-base font-extrabold text-rose-600">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="tools-container" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </section>
+
+    <section id="tab-addtool" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm">
+        <h2 class="font-bold text-slate-800 mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-plus-circle text-blue-600"></i> 新しい工具の追加
+        </h2>
+        <form id="add-tool-form" onsubmit="handleAddTool(event)" class="space-y-3 text-xs">
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">工具名 <span class="text-red-500">*</span></label>
+            <input type="text" id="new-tool-name" oninput="autoGenerateToolId()" required placeholder="例: 充電式インパクトドライバ 18V" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">メーカー</label>
+              <input type="text" id="new-tool-maker" oninput="autoGenerateToolId()" placeholder="例: マキタ, KTC" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">型式 / 品番</label>
+              <input type="text" id="new-tool-model" oninput="autoGenerateToolId()" placeholder="例: TD173DRGX" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">カテゴリ</label>
+              <select id="new-tool-category" required class="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+              </select>
+            </div>
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">保管場所 / ラック位置</label>
+              <select id="new-tool-location" onchange="autoGenerateToolId()" required class="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="block font-medium text-slate-700">工具ID (自動生成)</label>
+              <span class="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium"><i class="fa-solid fa-wand-magic-sparkles"></i> 自動設定</span>
+            </div>
+            <input type="text" id="new-tool-id" required placeholder="名前・保管場所を選択すると自動設定されます" class="w-full border border-slate-300 bg-slate-50 font-mono text-slate-700 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+
+          <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition shadow">
+            工具を登録する
+          </button>
+        </form>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-qrcode text-blue-600"></i> 工具QRコードラベル一覧・印刷
+          </h2>
+          <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium shadow self-end sm:self-auto">
+            <i class="fa-solid fa-print"></i> ラベル印刷
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-4 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+          <div class="relative sm:col-span-5">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+            <input type="text" id="qr-search-input" oninput="renderQrManager()" placeholder="ラベルを工具名・IDで検索..." class="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          </div>
+
+          <div class="sm:col-span-3">
+            <select id="qr-filter-category" onchange="renderQrManager()" class="w-full py-1.5 px-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+            </select>
+          </div>
+
+          <div class="sm:col-span-4">
+            <select id="qr-filter-location" onchange="renderQrManager()" class="w-full py-1.5 px-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700">
+            </select>
+          </div>
+        </div>
+
+        <div id="qr-labels-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"></div>
+      </div>
+    </section>
+
+    <section id="tab-categories" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm">
+        <h2 class="font-bold text-slate-800 mb-1 flex items-center gap-2">
+          <i class="fa-solid fa-tags text-purple-600"></i> カテゴリの追加・編集・削除
+        </h2>
+        <form id="add-category-form" onsubmit="handleAddCategory(event)" class="flex gap-2 my-3">
+          <input type="text" id="new-category-input" required placeholder="新しいカテゴリ名 (例: 油圧工具)" class="flex-1 text-xs sm:text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 outline-none">
+          <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-4 py-2 rounded-lg font-bold transition shadow">追加</button>
+        </form>
+        <div class="border rounded-xl overflow-hidden border-slate-200">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+              <tr>
+                <th class="p-3">カテゴリ名</th>
+                <th class="p-3 text-center">該当工具数</th>
+                <th class="p-3 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="category-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm">
+        <h2 class="font-bold text-slate-800 mb-1 flex items-center gap-2">
+          <i class="fa-solid fa-location-dot text-emerald-600"></i> 保管場所の追加・編集・削除
+        </h2>
+        <form id="add-location-form" onsubmit="handleAddLocation(event)" class="flex gap-2 my-3">
+          <input type="text" id="new-location-input" required placeholder="新しい保管場所名 (例: D棚-01)" class="flex-1 text-xs sm:text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none">
+          <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-4 py-2 rounded-lg font-bold transition shadow">追加</button>
+        </form>
+        <div class="border rounded-xl overflow-hidden border-slate-200">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+              <tr>
+                <th class="p-3">保管場所名</th>
+                <th class="p-3 text-center">該当工具数</th>
+                <th class="p-3 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="location-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-history" class="hidden space-y-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm">
+        <div class="flex justify-between items-start mb-2">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-mobile-screen-button text-blue-600"></i> このスマホ端末の登録情報
+          </h2>
+          <button onclick="openUserModal()" class="text-xs text-blue-600 hover:text-blue-800 font-medium">名前を編集</button>
+        </div>
+        <div class="bg-blue-50/50 rounded-xl p-3 border border-blue-100 text-xs space-y-1.5">
+          <div class="flex justify-between">
+            <span class="text-slate-500">使用者名:</span>
+            <span id="tab-history-username" class="font-bold text-slate-800">---</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">スマホ端末UUID:</span>
+            <span id="tab-history-deviceid" class="font-mono text-slate-600">---</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl shadow-sm">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left text-blue-600"></i> 貸出・返却履歴ログ
+          </h2>
+          <button onclick="clearHistory()" class="text-xs text-red-500 hover:text-red-700">履歴消去</button>
+        </div>
+        <div id="history-list" class="space-y-2 max-h-[500px] overflow-y-auto pr-1"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="user-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
+      <h3 class="font-bold text-slate-800 text-base mb-1 flex items-center gap-2">
+        <i class="fa-solid fa-user-gear text-blue-600"></i> スマホ使用者名の設定
+      </h3>
+      <p class="text-[11px] text-slate-500 mb-4">貸し借り時に「誰が借りたか」を識別するための名前を設定します。</p>
+
+      <form onsubmit="saveUserProfile(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">お名前 / 部署・チーム名 <span class="text-red-500">*</span></label>
+          <input type="text" id="user-modal-name" required placeholder="例: 山田太郎 (電気組)" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+          <span class="text-[10px] text-slate-400 block">端末識別ID (自動生成):</span>
+          <span id="user-modal-deviceid" class="font-mono text-xs text-slate-600 font-bold">---</span>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closeUserModal()" class="flex-1 bg-slate-200 text-slate-700 py-2.5 rounded-lg text-xs font-medium">キャンセル</button>
+          <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg text-xs font-bold shadow">保存する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="qr-choice-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
+      <div class="text-center mb-4">
+        <span id="qr-choice-status-badge" class="inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1">ステータス</span>
+        <h3 id="qr-choice-tool-name" class="font-bold text-slate-800 text-base leading-snug">工具名</h3>
+        <div id="qr-choice-tool-id" class="text-xs font-mono text-slate-400">ID: TL-000</div>
+      </div>
+
+      <p class="text-xs text-slate-600 text-center mb-4 font-medium">どのような操作を行いますか？</p>
+
+      <div class="space-y-2.5">
+        <button onclick="handleQrChoiceBorrowReturn()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-right-left"></i>
+            </div>
+            <div>
+              <div class="font-bold text-sm">貸し借りする</div>
+              <div class="text-[10px] text-blue-100">自分で工具を使用または返却する</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right text-xs text-blue-200 group-hover:translate-x-1 transition-transform"></i>
+        </button>
+
+        <button onclick="handleQrChoiceSearch()" class="w-full bg-amber-500 hover:bg-amber-600 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+            <div>
+              <div class="font-bold text-sm">探す（使用状況を確認）</div>
+              <div class="text-[10px] text-amber-100">誰が借りているか・保管場所を調べる</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right text-xs text-amber-200 group-hover:translate-x-1 transition-transform"></i>
+        </button>
+      </div>
+
+      <button onclick="closeQrChoiceModal()" class="w-full mt-4 bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium py-2 rounded-lg text-xs transition">
+        キャンセル
+      </button>
+    </div>
+  </div>
+
+  <div id="status-detail-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-info text-blue-600"></i> 工具の貸借状況
+        </h3>
+        <button onclick="closeStatusDetailModal()" class="text-slate-400 hover:text-slate-600 text-sm">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="my-4 space-y-3">
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <h4 id="detail-tool-name" class="font-bold text-slate-800 text-sm mb-0.5">---</h4>
+          <div id="detail-tool-maker-model" class="text-[11px] text-slate-500 font-medium mb-1"></div>
+          <div id="detail-tool-id" class="text-[10px] font-mono text-slate-400 mb-2">ID: ---</div>
+          
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-500">保管場所:</span>
+            <span id="detail-tool-location" class="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">---</span>
+          </div>
+        </div>
+
+        <div id="detail-status-box" class="p-3 rounded-xl text-xs space-y-2 border"></div>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <div class="flex gap-2">
+          <button onclick="closeStatusDetailModal()" class="flex-1 bg-slate-200 text-slate-700 py-2.5 rounded-xl text-xs font-medium">閉じる</button>
+          <button onclick="switchToBorrowActionFromDetail()" id="detail-action-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-bold shadow">
+            この工具を借りる
+          </button>
+        </div>
+        <button onclick="openTroubleModalFromDetail()" class="w-full text-center text-xs text-rose-600 hover:underline py-1 font-medium">
+          <i class="fa-solid fa-triangle-exclamation"></i> 破損・紛失を報告/変更する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="edit-details-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
+      <h3 class="font-bold text-blue-600 text-base mb-1 flex items-center gap-2">
+        <i class="fa-solid fa-pen-to-square"></i> 返却予定日・メモの記入
+      </h3>
+      <p class="text-[11px] text-slate-500 mb-3">必要な場合のみ入力してください（いつでも変更可能です）。</p>
+      
+      <div id="edit-modal-tool-name" class="text-xs font-bold text-slate-800 mb-3 bg-slate-100 p-2 rounded-lg border border-slate-200">---</div>
+      
+      <div class="space-y-3 text-xs mb-5">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">返却予定日</label>
+          <input type="date" id="edit-return-date" class="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">作業目的・メモ</label>
+          <input type="text" id="edit-note" placeholder="例: 3F 電気配線作業で使用" class="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="closeEditDetailsModal()" class="flex-1 bg-slate-200 text-slate-700 py-2.5 rounded-lg text-xs font-medium">キャンセル</button>
+        <button onclick="saveToolDetails()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg text-xs font-bold shadow">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="trouble-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
+      <h3 class="font-bold text-rose-600 text-base mb-1 flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation"></i> 状態の変更 (破損・紛失)
+      </h3>
+      <p class="text-[11px] text-slate-500 mb-3">工具の状態を選択してください。</p>
+
+      <div id="trouble-modal-tool-name" class="text-xs font-bold text-slate-800 mb-4 bg-rose-50 p-2.5 rounded-lg border border-rose-200">---</div>
+
+      <div class="space-y-2 mb-5 text-xs">
+        <button onclick="setToolTroubleStatus('damaged')" class="w-full text-left p-3 border rounded-xl hover:bg-rose-50 border-rose-200 flex items-center justify-between group">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-wrench text-rose-500 text-base"></i>
+            <div>
+              <div class="font-bold text-slate-800">破損・修理中</div>
+              <div class="text-[10px] text-slate-500">故障・破損のため修理中（貸出不可）</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right text-xs text-rose-300 group-hover:translate-x-1 transition-transform"></i>
+        </button>
+
+        <button onclick="setToolTroubleStatus('lost')" class="w-full text-left p-3 border rounded-xl hover:bg-slate-100 border-slate-300 flex items-center justify-between group">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-circle-question text-slate-600 text-base"></i>
+            <div>
+              <div class="font-bold text-slate-800">紛失</div>
+              <div class="text-[10px] text-slate-500">行方不明・紛失した状態（貸出不可）</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right text-xs text-slate-400 group-hover:translate-x-1 transition-transform"></i>
+        </button>
+
+        <button onclick="setToolTroubleStatus('available')" class="w-full text-left p-3 border rounded-xl hover:bg-emerald-50 border-emerald-200 flex items-center justify-between group">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
+            <div>
+              <div class="font-bold text-slate-800">復旧（保管中に戻す）</div>
+              <div class="text-[10px] text-slate-500">修理完了または発見されたため貸出可能に戻す</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-chevron-right text-xs text-emerald-400 group-hover:translate-x-1 transition-transform"></i>
+        </button>
+      </div>
+
+      <button onclick="closeTroubleModal()" class="w-full bg-slate-100 text-slate-600 font-medium py-2 rounded-lg text-xs">
+        キャンセル
+      </button>
+    </div>
+  </div>
+
+  <div id="confirm-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
+      <h3 id="confirm-modal-title" class="font-bold text-slate-800 text-base mb-2">確認</h3>
+      <p id="confirm-modal-message" class="text-xs text-slate-600 mb-5 leading-relaxed">処理を実行しますか？</p>
+      <div class="flex gap-2">
+        <button id="confirm-modal-cancel" onclick="closeConfirmModal()" class="flex-1 bg-slate-200 text-slate-700 py-2.5 rounded-lg text-xs font-medium">キャンセル</button>
+        <button id="confirm-modal-ok" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg text-xs font-bold shadow">実行する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="quick-result-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center">
+      <div id="quick-result-icon-container" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl">
+        <i id="quick-result-icon" class="fa-solid fa-check"></i>
+      </div>
+      <span id="quick-result-badge" class="inline-block text-xs font-bold px-3 py-1 rounded-full mb-2">ステータス</span>
+      <h3 id="quick-result-tool-name" class="font-bold text-slate-800 text-base mb-1">工具名</h3>
+      <div id="quick-result-tool-id" class="text-xs font-mono text-slate-500 mb-4">ID: TL-000</div>
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-600 mb-5 text-left space-y-1">
+        <div class="flex justify-between"><span class="text-slate-400">操作者:</span><span id="quick-result-user" class="font-bold text-slate-800">---</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">保管場所:</span><span id="quick-result-location" class="font-bold text-slate-700">---</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">日時:</span><span id="quick-result-time" class="font-mono text-slate-700">---</span></div>
+      </div>
+      <button onclick="closeQuickResultModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs shadow-md">
+        全体管理表を見る
+      </button>
+    </div>
+  </div>
+
+  <div id="print-area" class="p-8 hidden"></div>
+
+  <script>
+    let isDetailedMode = false;
+    let categories = [];
+    let locations = [];
+    let tools = [];
+    let historyLogs = [];
+    let userProfile = { deviceId: '', userName: '' };
+
+    let currentStatusFilter = 'all';
+    let selectedToolForEdit = null;
+    let currentScannedTool = null;
+    let confirmCallback = null;
+
+    function initApp() {
+      loadUserProfile();
+      loadData();
+      populateCategoryDropdowns();
+      populateLocationDropdowns();
+      renderTools();
+      renderCategoryTable();
+      renderLocationTable();
+      renderHistory();
+      renderQrManager();
+      updateViewModeUI();
+      checkUrlParameters();
+    }
+
+    function loadUserProfile() {
+      let savedId = localStorage.getItem('tool_nav_device_id_v3');
+      if (!savedId) {
+        savedId = 'SP-' + Math.floor(100000 + Math.random() * 900000);
+        localStorage.setItem('tool_nav_device_id_v3', savedId);
+      }
+
+      let savedName = localStorage.getItem('tool_nav_user_name_v3') || `作業員-${savedId.slice(-4)}`;
+      userProfile = { deviceId: savedId, userName: savedName };
+
+      const headerNameEl = document.getElementById('header-user-name');
+      if (headerNameEl) headerNameEl.innerText = userProfile.userName;
+
+      const tabUserEl = document.getElementById('tab-history-username');
+      if (tabUserEl) tabUserEl.innerText = userProfile.userName;
+
+      const tabDevEl = document.getElementById('tab-history-deviceid');
+      if (tabDevEl) tabDevEl.innerText = userProfile.deviceId;
+    }
+
+    function openUserModal() {
+      document.getElementById('user-modal-name').value = userProfile.userName;
+      document.getElementById('user-modal-deviceid').innerText = userProfile.deviceId;
+      document.getElementById('user-modal').classList.remove('hidden');
+    }
+
+    function closeUserModal() {
+      document.getElementById('user-modal').classList.add('hidden');
+    }
+
+    function saveUserProfile(e) {
+      e.preventDefault();
+      const newName = document.getElementById('user-modal-name').value.trim();
+      if (!newName) return;
+
+      userProfile.userName = newName;
+      localStorage.setItem('tool_nav_user_name_v3', newName);
+
+      loadUserProfile();
+      closeUserModal();
+      showToast('使用者名を保存しました。', 'success');
+    }
+
+    function toggleViewMode() {
+      isDetailedMode = !isDetailedMode;
+      updateViewModeUI();
+      renderTools();
+    }
+
+    function updateViewModeUI() {
+      const modeLabel = document.getElementById('mode-label');
+      const modeIcon = document.getElementById('mode-icon');
+      const badgeTag = document.getElementById('mode-badge-tag');
+      const description = document.getElementById('mode-description');
+      const tabNav = document.getElementById('main-tab-nav');
+
+      if (isDetailedMode) {
+        if (modeLabel) modeLabel.innerText = "かんたん画面へ";
+        if (modeIcon) modeIcon.className = "fa-solid fa-border-all text-yellow-300";
+        if (badgeTag) {
+          badgeTag.innerText = "詳細表示モード";
+          badgeTag.className = "bg-purple-600 text-white font-bold px-2 py-0.5 rounded text-[10px]";
+        }
+        if (description) description.innerText = "管理者向け：タブ切替で登録・QR発行・場所編集・履歴確認が可能です。";
+        if (tabNav) tabNav.classList.remove('hidden');
+      } else {
+        if (modeLabel) modeLabel.innerText = "詳細画面へ";
+        if (modeIcon) modeIcon.className = "fa-solid fa-wand-magic-sparkles text-yellow-300";
+        if (badgeTag) {
+          badgeTag.innerText = "かんたん表示";
+          badgeTag.className = "bg-blue-600 text-white font-bold px-2 py-0.5 rounded text-[10px]";
+        }
+        if (description) description.innerText = "現場向け：全体管理表のみを表示中（ワンタップで貸出・返却）";
+        if (tabNav) tabNav.classList.add('hidden');
+        switchTab('dashboard');
+      }
+    }
+
+    function switchTab(tabName) {
+      const tabs = ['dashboard', 'addtool', 'categories', 'history'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        const sec = document.getElementById(`tab-${t}`);
+        if (btn && sec) {
+          if (t === tabName) {
+            btn.className = "tab-active flex-1 min-w-[100px] py-3 px-2 text-center text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-center gap-1 font-bold text-blue-600";
+            sec.classList.remove('hidden');
+          } else {
+            btn.className = "flex-1 min-w-[100px] py-3 px-2 text-center text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-500 hover:text-slate-700";
+            sec.classList.add('hidden');
+          }
+        }
+      });
+
+      if (tabName === 'addtool') renderQrManager();
+      else if (tabName === 'history') renderHistory();
+    }
+
+    function loadData() {
+      const defaultCategories = ['電動工具', '手工具', '測定工具', '切削工具', 'その他'];
+      const defaultLocations = ['A棚-01', 'A棚-02', 'B棚-01', 'ラックC', '保管庫D'];
+      const defaultTools = [
+        { id: 'TL-A01-DRV18V', name: '充電式インパクトドライバ 18V', maker: 'マキタ', model: 'TD172DRGX', category: '電動工具', location: 'A棚-01', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' },
+        { id: 'TL-A02-MTR100', name: 'デジタルノギス 150mm', maker: 'ミツトヨ', model: 'CD-15AX', category: '測定工具', location: 'A棚-02', isBorrowed: true, status: 'borrowed', borrowedBy: 'SP-883210', borrowedByName: '鈴木 (現場B)', borrowedAt: '2026/09/20 09:15', returnDate: '2026/09/25', note: '2F 電気配線点検' },
+        { id: 'TL-B01-WRN12P', name: 'メガネレンチセット (12本組)', maker: 'KTC', model: 'TM512', category: '手工具', location: 'B棚-01', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' }
+      ];
+
+      categories = JSON.parse(localStorage.getItem('tool_nav_categories_v3')) || defaultCategories;
+      locations = JSON.parse(localStorage.getItem('tool_nav_locations_v3')) || defaultLocations;
+      tools = JSON.parse(localStorage.getItem('tool_nav_tools_v3')) || defaultTools;
+      
+      tools.forEach(t => {
+        if (!t.status) {
+          t.status = t.isBorrowed ? 'borrowed' : 'available';
+        }
+        if (t.maker === undefined) t.maker = '';
+        if (t.model === undefined) t.model = '';
+      });
+
+      historyLogs = JSON.parse(localStorage.getItem('tool_nav_history_v3')) || [];
+    }
+
+    function saveData() {
+      localStorage.setItem('tool_nav_categories_v3', JSON.stringify(categories));
+      localStorage.setItem('tool_nav_locations_v3', JSON.stringify(locations));
+      localStorage.setItem('tool_nav_tools_v3', JSON.stringify(tools));
+      localStorage.setItem('tool_nav_history_v3', JSON.stringify(historyLogs));
+    }
+
+    function populateCategoryDropdowns() {
+      const filterCat = document.getElementById('filter-category');
+      const newToolCat = document.getElementById('new-tool-category');
+      const qrFilterCat = document.getElementById('qr-filter-category');
+
+      if (filterCat) {
+        filterCat.innerHTML = '<option value="all">すべてのカテゴリ</option>' + 
+          categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+      if (newToolCat) {
+        newToolCat.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+      if (qrFilterCat) {
+        qrFilterCat.innerHTML = '<option value="all">すべてのカテゴリ</option>' + 
+          categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+    }
+
+    function populateLocationDropdowns() {
+      const filterLoc = document.getElementById('filter-location');
+      const newToolLoc = document.getElementById('new-tool-location');
+      const qrFilterLoc = document.getElementById('qr-filter-location');
+
+      if (filterLoc) {
+        filterLoc.innerHTML = '<option value="all">すべての保管場所</option>' + 
+          locations.map(l => `<option value="${l}">${l}</option>`).join('');
+      }
+      if (newToolLoc) {
+        newToolLoc.innerHTML = locations.map(l => `<option value="${l}">${l}</option>`).join('');
+      }
+      if (qrFilterLoc) {
+        qrFilterLoc.innerHTML = '<option value="all">すべての保管場所</option>' + 
+          locations.map(l => `<option value="${l}">${l}</option>`).join('');
+      }
+    }
+
+    function autoGenerateToolId() {
+      const nameInput = document.getElementById('new-tool-name');
+      const makerInput = document.getElementById('new-tool-maker');
+      const modelInput = document.getElementById('new-tool-model');
+      const locSelect = document.getElementById('new-tool-location');
+      const idInput = document.getElementById('new-tool-id');
+
+      if (!nameInput || !idInput) return;
+
+      const name = nameInput.value.trim();
+      const maker = makerInput ? makerInput.value.trim() : '';
+      const model = modelInput ? modelInput.value.trim() : '';
+      const loc = locSelect ? locSelect.value : 'A01';
+
+      if (!name && !model && !maker) {
+        idInput.value = '';
+        return;
+      }
+
+      const cleanLoc = loc.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4) || 'LOC';
+      const cleanMaker = maker.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4);
+      const cleanModel = model.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10);
+      const cleanName = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+
+      let codeParts = [];
+      if (cleanMaker) codeParts.push(cleanMaker);
+      if (cleanModel) codeParts.push(cleanModel);
+      if (cleanName && (!cleanModel || !cleanModel.includes(cleanName))) codeParts.push(cleanName);
+
+      let mainCode = codeParts.join('-');
+      if (!mainCode) {
+        mainCode = 'TOOL';
+      }
+
+      const randomSuffix = Math.floor(100 + Math.random() * 900);
+      idInput.value = `TL-${cleanLoc}-${mainCode.slice(0, 16)}-${randomSuffix}`;
+    }
+
+    function checkUrlParameters() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const toolId = urlParams.get('tool');
+      if (!toolId) return;
+
+      const matchedTool = tools.find(t => t.id === toolId);
+      if (matchedTool) {
+        currentScannedTool = matchedTool;
+        openQrChoiceModal(matchedTool);
+      } else {
+        showToast(`該当する工具 (ID: ${toolId}) が見つかりませんでした。`, 'warning');
+      }
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    function openQrChoiceModal(tool) {
+      document.getElementById('qr-choice-tool-name').innerText = tool.name;
+      document.getElementById('qr-choice-tool-id').innerText = `ID: ${tool.id}`;
+
+      const badge = document.getElementById('qr-choice-status-badge');
+      if (tool.status === 'damaged') {
+        badge.className = "inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1 bg-rose-100 text-rose-700";
+        badge.innerText = "破損・修理中";
+      } else if (tool.status === 'lost') {
+        badge.className = "inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1 bg-slate-200 text-slate-700";
+        badge.innerText = "紛失";
+      } else if (tool.isBorrowed) {
+        badge.className = "inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1 bg-amber-100 text-amber-700";
+        badge.innerText = `貸出中 (${tool.borrowedByName || '使用者未定'})`;
+      } else {
+        badge.className = "inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1 bg-emerald-100 text-emerald-700";
+        badge.innerText = "保管中 (貸出可能)";
+      }
+
+      document.getElementById('qr-choice-modal').classList.remove('hidden');
+    }
+
+    function closeQrChoiceModal() {
+      document.getElementById('qr-choice-modal').classList.add('hidden');
+    }
+
+    function handleQrChoiceBorrowReturn() {
+      if (!currentScannedTool) return;
+      closeQrChoiceModal();
+
+      const tool = currentScannedTool;
+
+      if (tool.status === 'damaged' || tool.status === 'lost') {
+        const statusText = tool.status === 'damaged' ? '破損・修理中' : '紛失';
+        showToast(`この工具は現在 [${statusText}] のため貸出できません。`, 'warning');
+        return;
+      }
+
+      if (!tool.isBorrowed) {
+        executeBorrowAction(tool);
+      } else {
+        if (!checkBorrowerPermission(tool)) return;
+        executeReturnAction(tool);
+      }
+    }
+
+    function handleQrChoiceSearch() {
+      if (!currentScannedTool) return;
+      closeQrChoiceModal();
+      showStatusDetailModal(currentScannedTool);
+    }
+
+    function checkBorrowerPermission(tool) {
+      if (!tool.isBorrowed) return true;
+      
+      if (tool.borrowedBy && tool.borrowedBy !== userProfile.deviceId) {
+        const borrowerName = tool.borrowedByName || '他の作業員';
+        showConfirmModal(
+          '⚠️ 返却制限の確認',
+          `この工具は【${borrowerName}】さん（端末ID: ${tool.borrowedBy}）が借りています。\n\n本人の端末ではありませんが、代理で返却処理を続行しますか？`,
+          () => {
+            executeReturnAction(tool);
+          }
+        );
+        return false;
+      }
+      return true;
+    }
+
+    function executeBorrowAction(tool) {
+      const now = new Date();
+      const formattedDate = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+
+      tool.isBorrowed = true;
+      tool.status = 'borrowed';
+      tool.borrowedBy = userProfile.deviceId;
+      tool.borrowedByName = userProfile.userName;
+      tool.borrowedAt = formattedDate;
+
+      logHistory({ toolName: tool.name, action: 'borrow', userName: userProfile.userName, deviceId: userProfile.deviceId, timestamp: formattedDate });
+
+      saveData();
+      renderTools();
+      renderHistory();
+
+      const modal = document.getElementById('quick-result-modal');
+      const iconContainer = document.getElementById('quick-result-icon-container');
+      const icon = document.getElementById('quick-result-icon');
+      const badge = document.getElementById('quick-result-badge');
+
+      iconContainer.className = "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl bg-amber-100 text-amber-600";
+      icon.className = "fa-solid fa-hand-holding";
+      badge.className = "inline-block text-xs font-bold px-3 py-1 rounded-full mb-2 bg-amber-500 text-white";
+      badge.innerText = "🎉 貸出完了";
+
+      document.getElementById('quick-result-tool-name').innerText = tool.name;
+      document.getElementById('quick-result-tool-id').innerText = `ID: ${tool.id}`;
+      document.getElementById('quick-result-user').innerText = `${userProfile.userName} (${userProfile.deviceId})`;
+      document.getElementById('quick-result-location').innerText = tool.location || '未指定';
+      document.getElementById('quick-result-time').innerText = formattedDate;
+
+      modal.classList.remove('hidden');
+    }
+
+    function executeReturnAction(tool) {
+      const now = new Date();
+      const formattedDate = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+
+      tool.isBorrowed = false;
+      tool.status = 'available';
+      tool.borrowedBy = null;
+      tool.borrowedByName = null;
+      tool.borrowedAt = null;
+      tool.returnDate = null;
+
+      logHistory({ toolName: tool.name, action: 'return', userName: userProfile.userName, deviceId: userProfile.deviceId, timestamp: formattedDate });
+
+      saveData();
+      renderTools();
+      renderHistory();
+
+      const modal = document.getElementById('quick-result-modal');
+      const iconContainer = document.getElementById('quick-result-icon-container');
+      const icon = document.getElementById('quick-result-icon');
+      const badge = document.getElementById('quick-result-badge');
+
+      iconContainer.className = "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl bg-emerald-100 text-emerald-600";
+      icon.className = "fa-solid fa-rotate-left";
+      badge.className = "inline-block text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-500 text-white";
+      badge.innerText = "✅ 返却完了";
+
+      document.getElementById('quick-result-tool-name').innerText = tool.name;
+      document.getElementById('quick-result-tool-id').innerText = `ID: ${tool.id}`;
+      document.getElementById('quick-result-user').innerText = `${userProfile.userName} (${userProfile.deviceId})`;
+      document.getElementById('quick-result-location').innerText = tool.location || '未指定';
+      document.getElementById('quick-result-time').innerText = formattedDate;
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeQuickResultModal() {
+      document.getElementById('quick-result-modal').classList.add('hidden');
+    }
+
+    function showStatusDetailModal(tool) {
+      document.getElementById('detail-tool-name').innerText = tool.name;
+      
+      const makerModelEl = document.getElementById('detail-tool-maker-model');
+      if (makerModelEl) {
+        const parts = [tool.maker, tool.model].filter(Boolean);
+        makerModelEl.innerText = parts.length > 0 ? parts.join(' / ') : '';
+      }
+
+      document.getElementById('detail-tool-id').innerText = `ID: ${tool.id}`;
+      document.getElementById('detail-tool-location').innerText = tool.location || '未指定';
+
+      const statusBox = document.getElementById('detail-status-box');
+      const actionBtn = document.getElementById('detail-action-btn');
+
+      if (tool.status === 'damaged') {
+        statusBox.className = "p-3 rounded-xl text-xs space-y-2 border bg-rose-50 border-rose-200 text-rose-900";
+        statusBox.innerHTML = `
+          <div class="flex justify-between font-bold border-b border-rose-200 pb-1.5 text-rose-800">
+            <span>ステータス:</span>
+            <span><i class="fa-solid fa-wrench"></i> 破損・修理中</span>
+          </div>
+          <p class="text-[11px] text-rose-700">この工具は現在破損または修理中のため貸出できません。</p>
+        `;
+        actionBtn.innerText = "使用不可 (修理中)";
+        actionBtn.className = "flex-1 bg-slate-300 text-slate-500 py-2.5 rounded-xl text-xs font-bold cursor-not-allowed";
+      } else if (tool.status === 'lost') {
+        statusBox.className = "p-3 rounded-xl text-xs space-y-2 border bg-slate-100 border-slate-300 text-slate-800";
+        statusBox.innerHTML = `
+          <div class="flex justify-between font-bold border-b border-slate-300 pb-1.5 text-slate-700">
+            <span>ステータス:</span>
+            <span><i class="fa-solid fa-circle-question"></i> 紛失</span>
+          </div>
+          <p class="text-[11px] text-slate-600">この工具は紛失報告されています。</p>
+        `;
+        actionBtn.innerText = "使用不可 (紛失)";
+        actionBtn.className = "flex-1 bg-slate-300 text-slate-500 py-2.5 rounded-xl text-xs font-bold cursor-not-allowed";
+      } else if (tool.isBorrowed) {
+        const isSelf = tool.borrowedBy === userProfile.deviceId;
+        statusBox.className = "p-3 rounded-xl text-xs space-y-2 border bg-amber-50 border-amber-200 text-amber-900";
+        statusBox.innerHTML = `
+          <div class="flex justify-between font-bold border-b border-amber-200 pb-1.5 text-amber-800">
+            <span>ステータス:</span>
+            <span>貸出中 ${isSelf ? '(あなたが使用中)' : ''}</span>
+          </div>
+          <div class="flex justify-between"><span class="text-amber-700">使用者:</span><span class="font-bold">${tool.borrowedByName || '不明'}</span></div>
+          <div class="flex justify-between"><span class="text-amber-700">端末ID:</span><span class="font-mono text-[11px]">${tool.borrowedBy || '---'}</span></div>
+          <div class="flex justify-between"><span class="text-amber-700">貸出日時:</span><span class="font-mono">${tool.borrowedAt || '---'}</span></div>
+          <div class="flex justify-between"><span class="text-amber-700">返却予定:</span><span class="font-mono font-bold">${tool.returnDate || '未設定'}</span></div>
+          ${tool.note ? `<div class="mt-1 pt-1.5 border-t border-amber-200 text-[11px]"><span class="text-amber-700 block">作業目的メモ:</span>${tool.note}</div>` : ''}
+        `;
+
+        actionBtn.innerText = isSelf ? "返却する" : "代理で返却する";
+        actionBtn.className = isSelf 
+          ? "flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2.5 rounded-xl text-xs font-bold shadow"
+          : "flex-1 bg-slate-500 hover:bg-slate-600 text-white py-2.5 rounded-xl text-xs font-bold shadow";
+      } else {
+        statusBox.className = "p-3 rounded-xl text-xs space-y-2 border bg-emerald-50 border-emerald-200 text-emerald-900";
+        statusBox.innerHTML = `
+          <div class="flex justify-between font-bold border-b border-emerald-200 pb-1.5 text-emerald-800">
+            <span>ステータス:</span>
+            <span>保管中（誰でも貸出可能）</span>
+          </div>
+          <p class="text-[11px] text-emerald-700 leading-relaxed">
+            この工具は現在どこにも貸出されていません。<br>保管場所 <b>[${tool.location || '未指定'}]</b> にあります。
+          </p>
+        `;
+
+        actionBtn.innerText = "この工具を借りる";
+        actionBtn.className = "flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-bold shadow";
+      }
+
+      document.getElementById('status-detail-modal').classList.remove('hidden');
+    }
+
+    function closeStatusDetailModal() {
+      document.getElementById('status-detail-modal').classList.add('hidden');
+    }
+
+    function switchToBorrowActionFromDetail() {
+      if (!currentScannedTool) return;
+      closeStatusDetailModal();
+      if (currentScannedTool.status === 'damaged' || currentScannedTool.status === 'lost') {
+        showToast('この工具は現在利用できません。', 'warning');
+        return;
+      }
+      if (!currentScannedTool.isBorrowed) {
+        executeBorrowAction(currentScannedTool);
+      } else {
+        if (!checkBorrowerPermission(currentScannedTool)) return;
+        executeReturnAction(currentScannedTool);
+      }
+    }
+
+    function setStatusFilter(filter) {
+      currentStatusFilter = filter;
+      ['all', 'borrowed', 'available', 'trouble'].forEach(f => {
+        const btn = document.getElementById(`filter-status-${f}`);
+        if (btn) {
+          btn.className = (f === filter) ? "flex-1 py-1.5 rounded-lg bg-blue-600 text-white font-medium shadow-sm" : "flex-1 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-medium";
+        }
+      });
+      renderTools();
+    }
+
+    function renderTools() {
+      const container = document.getElementById('tools-container');
+      if (!container) return;
+
+      const searchQuery = (document.getElementById('search-input')?.value || '').toLowerCase();
+      const categoryFilter = document.getElementById('filter-category')?.value || 'all';
+      const locationFilter = document.getElementById('filter-location')?.value || 'all';
+
+      let borrowedCount = 0;
+      let availableCount = 0;
+      let troubleCount = 0;
+
+      tools.forEach(t => {
+        if (t.status === 'damaged' || t.status === 'lost') troubleCount++;
+        else if (t.isBorrowed) borrowedCount++;
+        else availableCount++;
+      });
+
+      document.getElementById('metric-total').innerText = tools.length;
+      document.getElementById('metric-borrowed').innerText = borrowedCount;
+      document.getElementById('metric-available').innerText = availableCount;
+      document.getElementById('metric-trouble').innerText = troubleCount;
+
+      const filtered = tools.filter(tool => {
+        const matchesSearch = tool.name.toLowerCase().includes(searchQuery) || 
+          tool.id.toLowerCase().includes(searchQuery) ||
+          (tool.maker && tool.maker.toLowerCase().includes(searchQuery)) ||
+          (tool.model && tool.model.toLowerCase().includes(searchQuery)) ||
+          (tool.borrowedByName && tool.borrowedByName.toLowerCase().includes(searchQuery));
+        const matchesCategory = categoryFilter === 'all' || tool.category === categoryFilter;
+        const matchesLocation = locationFilter === 'all' || tool.location === locationFilter;
+        
+        let matchesStatus = true;
+        if (currentStatusFilter === 'borrowed') matchesStatus = tool.isBorrowed && tool.status === 'borrowed';
+        else if (currentStatusFilter === 'available') matchesStatus = !tool.isBorrowed && tool.status === 'available';
+        else if (currentStatusFilter === 'trouble') matchesStatus = (tool.status === 'damaged' || tool.status === 'lost');
+
+        return matchesSearch && matchesCategory && matchesLocation && matchesStatus;
+      });
+
+      container.innerHTML = '';
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+            <i class="fa-solid fa-toolbox text-3xl mb-2 opacity-50"></i>
+            <p class="text-xs">条件に該当する工具が見つかりません</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(tool => {
+        const isSelf = tool.borrowedBy === userProfile.deviceId;
+        const isTrouble = tool.status === 'damaged' || tool.status === 'lost';
+        
+        let statusBadge = '';
+        if (tool.status === 'damaged') {
+          statusBadge = `<span class="bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-wrench"></i> 破損・修理中</span>`;
+        } else if (tool.status === 'lost') {
+          statusBadge = `<span class="bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-circle-question"></i> 紛失</span>`;
+        } else if (tool.isBorrowed) {
+          statusBadge = `<span class="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px]">貸出中</span>`;
+        } else {
+          statusBadge = `<span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded text-[10px]">保管中</span>`;
+        }
+
+        const cardHtml = `
+          <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 relative flex flex-col justify-between">
+            <div>
+              <div class="flex justify-between items-start mb-2">
+                <div>
+                  <div class="flex items-center gap-1.5 mb-1">
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">${tool.category}</span>
+                    ${statusBadge}
+                  </div>
+                  <h3 class="font-bold text-slate-800 text-sm leading-snug">${tool.name}</h3>
+                  ${(tool.maker || tool.model) ? `
+                    <div class="text-[11px] text-slate-500 font-medium mt-0.5">
+                      ${tool.maker ? `<span class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 mr-1">${tool.maker}</span>` : ''}
+                      ${tool.model ? `<span class="font-mono text-slate-600">${tool.model}</span>` : ''}
+                    </div>
+                  ` : ''}
+                  <div class="text-[10px] text-slate-400 font-mono mt-0.5">ID: ${tool.id}</div>
+                </div>
+                <div class="flex items-center">
+                  <label class="relative inline-flex items-center ${isTrouble ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}">
+                    <input type="checkbox" onchange="toggleToolStatus('${tool.id}')" ${tool.isBorrowed ? 'checked' : ''} ${isTrouble ? 'disabled' : ''} class="sr-only peer">
+                    <div class="w-11 h-6 bg-emerald-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-600 mt-2 space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <div class="flex justify-between">
+                  <span class="text-slate-400">保管場所:</span>
+                  <span class="font-bold text-slate-700">${tool.location}</span>
+                </div>
+                ${tool.isBorrowed && !isTrouble ? `
+                  <div class="flex justify-between">
+                    <span class="text-slate-400">使用者:</span>
+                    <span class="font-bold ${isSelf ? 'text-blue-600' : 'text-amber-700'}">${tool.borrowedByName} ${isSelf ? '(あなた)' : ''}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-slate-400">貸出日時:</span>
+                    <span class="font-mono text-slate-600 text-[11px]">${tool.borrowedAt || '---'}</span>
+                  </div>
+                  ${tool.returnDate ? `<div class="flex justify-between"><span class="text-slate-400">返却予定:</span><span class="font-mono font-bold text-slate-700">${tool.returnDate}</span></div>` : ''}
+                  ${tool.note ? `<div class="pt-1 border-t border-slate-200 text-[11px] text-slate-600"><span class="text-slate-400 block">メモ:</span>${tool.note}</div>` : ''}
+                ` : ''}
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+              <button onclick="openEditDetailsModal('${tool.id}')" class="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1">
+                <i class="fa-solid fa-pen-to-square"></i> メモ・予定日
+              </button>
+              
+              <div class="flex items-center gap-2">
+                <button onclick="openTroubleModal('${tool.id}')" class="text-rose-500 hover:text-rose-700 font-medium flex items-center gap-1">
+                  <i class="fa-solid fa-triangle-exclamation"></i> 状態変更
+                </button>
+                <button onclick="deleteTool('${tool.id}')" class="text-slate-400 hover:text-red-600 p-1">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+        container.insertAdjacentHTML('beforeend', cardHtml);
+      });
+    }
+
+    function toggleToolStatus(toolId) {
+      const tool = tools.find(t => t.id === toolId);
+      if (!tool) return;
+
+      if (tool.status === 'damaged' || tool.status === 'lost') {
+        showToast('破損・紛失に設定されている工具は貸出できません。', 'warning');
+        renderTools();
+        return;
+      }
+
+      if (!tool.isBorrowed) {
+        executeBorrowAction(tool);
+      } else {
+        if (!checkBorrowerPermission(tool)) {
+          renderTools();
+          return;
+        }
+        executeReturnAction(tool);
+      }
+    }
+
+    function openEditDetailsModal(toolId) {
+      const tool = tools.find(t => t.id === toolId);
+      if (!tool) return;
+      selectedToolForEdit = tool;
+      
+      document.getElementById('edit-modal-tool-name').innerText = `${tool.name} (${tool.id})`;
+      document.getElementById('edit-return-date').value = tool.returnDate || '';
+      document.getElementById('edit-note').value = tool.note || '';
+      document.getElementById('edit-details-modal').classList.remove('hidden');
+    }
+
+    function closeEditDetailsModal() {
+      document.getElementById('edit-details-modal').classList.add('hidden');
+      selectedToolForEdit = null;
+    }
+
+    function saveToolDetails() {
+      if (!selectedToolForEdit) return;
+      
+      selectedToolForEdit.returnDate = document.getElementById('edit-return-date').value || null;
+      selectedToolForEdit.note = document.getElementById('edit-note').value.trim();
+      
+      saveData();
+      renderTools();
+      closeEditDetailsModal();
+      showToast('工具のメモ・返却予定日を更新しました。', 'success');
+    }
+
+    function openTroubleModal(toolId) {
+      const tool = tools.find(t => t.id === toolId);
+      if (!tool) return;
+      selectedToolForEdit = tool;
+
+      document.getElementById('trouble-modal-tool-name').innerText = `${tool.name} (${tool.id})`;
+      document.getElementById('trouble-modal').classList.remove('hidden');
+    }
+
+    function openTroubleModalFromDetail() {
+      closeStatusDetailModal();
+      if (currentScannedTool) {
+        openTroubleModal(currentScannedTool.id);
+      }
+    }
+
+    function closeTroubleModal() {
+      document.getElementById('trouble-modal').classList.add('hidden');
+      selectedToolForEdit = null;
+    }
+
+    function setToolTroubleStatus(newStatus) {
+      if (!selectedToolForEdit) return;
+
+      const tool = selectedToolForEdit;
+      tool.status = newStatus;
+
+      if (newStatus === 'damaged' || newStatus === 'lost') {
+        tool.isBorrowed = false;
+        tool.borrowedBy = null;
+        tool.borrowedByName = null;
+        tool.borrowedAt = null;
+      } else if (newStatus === 'available') {
+        tool.isBorrowed = false;
+        tool.borrowedBy = null;
+        tool.borrowedByName = null;
+      }
+
+      saveData();
+      renderTools();
+      closeTroubleModal();
+
+      const labelMap = { damaged: '破損・修理中', lost: '紛失', available: '保管中（復旧）' };
+      showToast(`工具 [${tool.name}] の状態を「${labelMap[newStatus]}」に変更しました。`, 'info');
+    }
+
+    function deleteTool(toolId) {
+      const tool = tools.find(t => t.id === toolId);
+      if (!tool) return;
+
+      showConfirmModal('工具の削除', `工具 [${tool.name}] を削除しますか？`, () => {
+        tools = tools.filter(t => t.id !== toolId);
+        saveData();
+        renderTools();
+        renderQrManager();
+        renderCategoryTable();
+        renderLocationTable();
+        showToast('工具を削除しました。', 'info');
+      });
+    }
+
+    function handleAddTool(e) {
+      e.preventDefault();
+      const name = document.getElementById('new-tool-name').value.trim();
+      const maker = document.getElementById('new-tool-maker')?.value.trim() || '';
+      const model = document.getElementById('new-tool-model')?.value.trim() || '';
+      const id = document.getElementById('new-tool-id').value.trim();
+      const category = document.getElementById('new-tool-category').value;
+      const location = document.getElementById('new-tool-location').value;
+
+      if (tools.some(t => t.id === id)) {
+        showToast('その工具IDは既に登録されています。', 'warning');
+        return;
+      }
+
+      tools.push({ id, name, maker, model, category: category || 'その他', location: location || '未指定', isBorrowed: false, status: 'available', borrowedBy: null, borrowedByName: null, borrowedAt: null, returnDate: null, note: '' });
+      saveData();
+      renderTools();
+      renderQrManager();
+      renderCategoryTable();
+      renderLocationTable();
+
+      document.getElementById('add-tool-form').reset();
+      autoGenerateToolId();
+      showToast(`工具 [${name}] を追加しました！`, 'success');
+    }
+
+    function handleAddCategory(e) {
+      e.preventDefault();
+      const val = document.getElementById('new-category-input').value.trim();
+      if (!val) return;
+      if (categories.includes(val)) return showToast('既に存在します。', 'warning');
+      categories.push(val);
+      saveData();
+      populateCategoryDropdowns();
+      renderCategoryTable();
+      document.getElementById('new-category-input').value = '';
+      showToast(`カテゴリ [${val}] を追加しました。`, 'success');
+    }
+
+    function renderCategoryTable() {
+      const tbody = document.getElementById('category-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      categories.forEach(cat => {
+        const count = tools.filter(t => t.category === cat).length;
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td class="p-3 font-bold text-slate-800">${cat}</td>
+            <td class="p-3 text-center text-slate-500">${count} 個</td>
+            <td class="p-3 text-right"><button onclick="deleteCategory('${cat}')" class="text-red-500 font-medium hover:underline">削除</button></td>
+          </tr>
+        `);
+      });
+    }
+
+    function deleteCategory(catName) {
+      showConfirmModal('カテゴリ削除', `カテゴリ [${catName}] を削除しますか？`, () => {
+        categories = categories.filter(c => c !== catName);
+        tools.forEach(t => { if (t.category === catName) t.category = 'その他'; });
+        saveData();
+        populateCategoryDropdowns();
+        renderCategoryTable();
+        renderTools();
+        showToast('カテゴリを削除しました。', 'info');
+      });
+    }
+
+    function handleAddLocation(e) {
+      e.preventDefault();
+      const val = document.getElementById('new-location-input').value.trim();
+      if (!val) return;
+      if (locations.includes(val)) return showToast('既に存在します。', 'warning');
+      locations.push(val);
+      saveData();
+      populateLocationDropdowns();
+      renderLocationTable();
+      document.getElementById('new-location-input').value = '';
+      showToast(`保管場所 [${val}] を追加しました。`, 'success');
+    }
+
+    function renderLocationTable() {
+      const tbody = document.getElementById('location-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      locations.forEach(loc => {
+        const count = tools.filter(t => t.location === loc).length;
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td class="p-3 font-bold text-slate-800">${loc}</td>
+            <td class="p-3 text-center text-slate-500">${count} 個</td>
+            <td class="p-3 text-right"><button onclick="deleteLocation('${loc}')" class="text-red-500 font-medium hover:underline">削除</button></td>
+          </tr>
+        `);
+      });
+    }
+
+    function deleteLocation(locName) {
+      showConfirmModal('保管場所削除', `保管場所 [${locName}] を削除しますか？`, () => {
+        locations = locations.filter(l => l !== locName);
+        tools.forEach(t => { if (t.location === locName) t.location = '未指定'; });
+        saveData();
+        populateLocationDropdowns();
+        renderLocationTable();
+        renderTools();
+        showToast('保管場所を削除しました。', 'info');
+      });
+    }
+
+    function renderQrManager() {
+      const container = document.getElementById('qr-labels-container');
+      const printArea = document.getElementById('print-area');
+      if (!container || !printArea) return;
+
+      const searchQuery = (document.getElementById('qr-search-input')?.value || '').toLowerCase();
+      const selectedCategory = document.getElementById('qr-filter-category')?.value || 'all';
+      const selectedLocation = document.getElementById('qr-filter-location')?.value || 'all';
+
+      const filtered = tools.filter(tool => {
+        const matchesCat = selectedCategory === 'all' || tool.category === selectedCategory;
+        const matchesLoc = selectedLocation === 'all' || tool.location === selectedLocation;
+        const matchesSearch = tool.name.toLowerCase().includes(searchQuery) ||
+          tool.id.toLowerCase().includes(searchQuery) ||
+          (tool.maker && tool.maker.toLowerCase().includes(searchQuery)) ||
+          (tool.model && tool.model.toLowerCase().includes(searchQuery));
+        return matchesCat && matchesLoc && matchesSearch;
+      });
+
+      container.innerHTML = '';
+      printArea.innerHTML = '<h1 style="font-size:18px; font-weight:bold; margin-bottom:15px;">工具QRコードラベル</h1><div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;" id="print-grid"></div>';
+
+      const printGrid = document.getElementById('print-grid');
+      const baseUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+
+      filtered.forEach(tool => {
+        const qrBoxId = `qrcode-${tool.id.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        const printQrBoxId = `print-qrcode-${tool.id.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+        container.insertAdjacentHTML('beforeend', `
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center flex flex-col items-center relative">
+            <button onclick="deleteTool('${tool.id}')" title="削除" class="absolute top-2 right-2 text-slate-400 hover:text-red-500 p-1 text-xs">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+            <div id="${qrBoxId}" class="p-1 bg-white border border-slate-200 rounded mb-2 mt-1"></div>
+            <div class="font-bold text-xs text-slate-800 truncate w-full px-2">${tool.name}</div>
+            ${(tool.maker || tool.model) ? `<div class="text-[10px] text-slate-600 truncate w-full px-2">${[tool.maker, tool.model].filter(Boolean).join(' ')}</div>` : ''}
+            <div class="text-[10px] text-slate-500 font-mono">${tool.id}</div>
+          </div>
+        `);
+
+        if (printGrid) {
+          printGrid.insertAdjacentHTML('beforeend', `
+            <div style="border:1px solid #ccc; padding:10px; text-align:center; border-radius:8px;">
+              <div id="${printQrBoxId}" style="display:inline-block; margin-bottom:5px;"></div>
+              <div style="font-size:11px; font-weight:bold;">${tool.name}</div>
+              ${(tool.maker || tool.model) ? `<div style="font-size:10px; color:#444;">${[tool.maker, tool.model].filter(Boolean).join(' ')}</div>` : ''}
+              <div style="font-size:10px; color:#666;">${tool.id}</div>
+            </div>
+          `);
+        }
+
+        setTimeout(() => {
+          const el = document.getElementById(qrBoxId);
+          const printEl = document.getElementById(printQrBoxId);
+          const fullScanUrl = `${baseUrl}?tool=${encodeURIComponent(tool.id)}`;
+
+          if (el && el.childNodes.length === 0) {
+            try {
+              new QRCode(el, { text: fullScanUrl, width: 80, height: 80, colorDark : "#0f172a", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.M });
+            } catch(e) {}
+          }
+          if (printEl && printEl.childNodes.length === 0) {
+            try {
+              new QRCode(printEl, { text: fullScanUrl, width: 90, height: 90, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.M });
+            } catch(e) {}
+          }
+        }, 50);
+      });
+    }
+
+    function logHistory(logEntry) {
+      logEntry.id = Date.now();
+      historyLogs.unshift(logEntry);
+      if (historyLogs.length > 50) historyLogs.pop();
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('history-list');
+      if (!container) return;
+      container.innerHTML = historyLogs.length === 0 ? '<div class="text-slate-400 text-xs text-center py-6">操作履歴はありません</div>' : '';
+
+      historyLogs.forEach(log => {
+        const isBorrow = log.action === 'borrow';
+        container.insertAdjacentHTML('beforeend', `
+          <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-full flex items-center justify-center ${isBorrow ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">
+                <i class="fa-solid ${isBorrow ? 'fa-hand-holding' : 'fa-rotate-left'} text-xs"></i>
+              </span>
+              <div>
+                <div class="font-bold text-slate-800">${log.toolName}</div>
+                <div class="text-[10px] text-slate-500 font-mono">${log.userName} (${log.deviceId})</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold ${isBorrow ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'}">${isBorrow ? '貸出' : '返却'}</span>
+              <div class="text-[9px] text-slate-400 mt-1">${log.timestamp}</div>
+            </div>
+          </div>
+        `);
+      });
+    }
+
+    function clearHistory() {
+      showConfirmModal('履歴消去', '履歴ログをすべて消去しますか？', () => {
+        historyLogs = [];
+        saveData();
+        renderHistory();
+        showToast('履歴を消去しました。', 'info');
+      });
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+
+      const bgMap = {
+        success: 'bg-emerald-600 text-white',
+        warning: 'bg-amber-500 text-white',
+        error: 'bg-rose-600 text-white',
+        info: 'bg-slate-800 text-white'
+      };
+
+      const iconMap = {
+        success: 'fa-circle-check',
+        warning: 'fa-triangle-exclamation',
+        error: 'fa-circle-xmark',
+        info: 'fa-circle-info'
+      };
+
+      const toast = document.createElement('div');
+      toast.className = `p-3 rounded-xl shadow-lg flex items-center gap-2 text-xs font-medium transition-all transform translate-y-2 opacity-0 pointer-events-auto ${bgMap[type] || bgMap.info}`;
+      toast.innerHTML = `<i class="fa-solid ${iconMap[type] || iconMap.info} text-sm"></i> <span>${message}</span>`;
+
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function showConfirmModal(title, message, onOk) {
+      document.getElementById('confirm-modal-title').innerText = title;
+      document.getElementById('confirm-modal-message').innerText = message;
+      confirmCallback = onOk;
+
+      const okBtn = document.getElementById('confirm-modal-ok');
+      okBtn.onclick = () => {
+        if (confirmCallback) confirmCallback();
+        closeConfirmModal();
+      };
+
+      document.getElementById('confirm-modal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirm-modal').classList.add('hidden');
+      confirmCallback = null;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initApp();
+    });
+  </script>
+</body>
+</html>
