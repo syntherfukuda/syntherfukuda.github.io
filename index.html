@@ -401,7 +401,6 @@
         </div>
       </div>
 
-      <!-- 購入時のデフォルト送り先メールアドレス設定カード -->
       <div class="bg-white p-4 rounded-xl shadow-sm">
         <h2 class="font-bold text-slate-800 flex items-center gap-2 mb-1">
           <i class="fa-solid fa-envelope text-purple-600"></i> 購入注文メールのデフォルト宛先設定
@@ -461,6 +460,7 @@
     </div>
   </div>
 
+  <!-- 【復元・修正】QRコードスキャン初回読み込み時の操作選択モーダル（貸出・返却・購入の3項目） -->
   <div id="qr-choice-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
       <div class="text-center mb-4">
@@ -472,32 +472,35 @@
       <p class="text-xs text-slate-600 text-center mb-4 font-medium">どのような操作を行いますか？</p>
 
       <div class="space-y-2.5">
-        <button onclick="handleQrChoiceBorrowReturn()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
+        <!-- 1. 貸出項目 -->
+        <button onclick="handleQrChoiceBorrow()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
-              <i class="fa-solid fa-right-left"></i>
+              <i class="fa-solid fa-hand-holding"></i>
             </div>
             <div>
-              <div class="font-bold text-sm">貸し借りする</div>
-              <div class="text-[10px] text-blue-100">自分で工具を使用または返却する</div>
+              <div class="font-bold text-sm">貸出（借りる）</div>
+              <div class="text-[10px] text-blue-100">この工具を使用・持ち出します</div>
             </div>
           </div>
           <i class="fa-solid fa-chevron-right text-xs text-blue-200 group-hover:translate-x-1 transition-transform"></i>
         </button>
 
-        <button onclick="handleQrChoiceSearch()" class="w-full bg-amber-500 hover:bg-amber-600 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
+        <!-- 2. 返却項目 -->
+        <button onclick="handleQrChoiceReturn()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
-              <i class="fa-solid fa-magnifying-glass"></i>
+              <i class="fa-solid fa-rotate-left"></i>
             </div>
             <div>
-              <div class="font-bold text-sm">探す（使用状況を確認）</div>
-              <div class="text-[10px] text-amber-100">誰が借りているか・保管場所を調べる</div>
+              <div class="font-bold text-sm">返却（返す）</div>
+              <div class="text-[10px] text-emerald-100">定位置の保管場所に返却します</div>
             </div>
           </div>
-          <i class="fa-solid fa-chevron-right text-xs text-amber-200 group-hover:translate-x-1 transition-transform"></i>
+          <i class="fa-solid fa-chevron-right text-xs text-emerald-200 group-hover:translate-x-1 transition-transform"></i>
         </button>
 
+        <!-- 3. 購入項目 -->
         <button onclick="handleQrChoicePurchase()" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
@@ -586,7 +589,65 @@
     window.batchScannedToolIds = [];
     let html5QrCodeScannerInstance = null;
 
-    // カテゴリ・保管場所ドロップダウンの表示更新
+    // Toast通知表示関数
+    window.showToast = function(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      let bg = 'bg-slate-800';
+      let icon = 'fa-circle-info';
+      if (type === 'success') { bg = 'bg-emerald-600'; icon = 'fa-circle-check'; }
+      else if (type === 'warning') { bg = 'bg-amber-600'; icon = 'fa-triangle-exclamation'; }
+      else if (type === 'error') { bg = 'bg-rose-600'; icon = 'fa-circle-xmark'; }
+
+      toast.className = `${bg} text-white text-xs px-4 py-3 rounded-xl shadow-lg flex items-center justify-between gap-2 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
+      toast.innerHTML = `
+        <div class="flex items-center gap-2">
+          <i class="fa-solid ${icon}"></i>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    };
+
+    // 確認モーダル機能
+    window.showConfirmModal = function(title, message, onOk) {
+      const modal = document.getElementById('confirm-modal');
+      const titleEl = document.getElementById('confirm-modal-title');
+      const msgEl = document.getElementById('confirm-modal-message');
+      const okBtn = document.getElementById('confirm-modal-ok');
+
+      if (!modal || !titleEl || !msgEl || !okBtn) return;
+
+      titleEl.innerText = title;
+      msgEl.innerText = message;
+      window.confirmCallback = onOk;
+
+      okBtn.onclick = function() {
+        closeConfirmModal();
+        if (window.confirmCallback) {
+          window.confirmCallback();
+          window.confirmCallback = null;
+        }
+      };
+
+      modal.classList.remove('hidden');
+    };
+
+    window.closeConfirmModal = function() {
+      const modal = document.getElementById('confirm-modal');
+      if (modal) modal.classList.add('hidden');
+    };
+
+    // ドロップダウン更新処理
     window.populateCategoryDropdowns = function() {
       const filterCat = document.getElementById('filter-category');
       const qrFilterCat = document.getElementById('qr-filter-category');
@@ -718,7 +779,6 @@
       }
     };
 
-    // デフォルトメール宛先の保存処理
     window.saveOrderEmailSetting = function(e) {
       e.preventDefault();
       const emailInput = document.getElementById('setting-order-email');
@@ -1343,7 +1403,6 @@
       const tabDevEl = document.getElementById('tab-history-deviceid');
       if (tabDevEl) tabDevEl.innerText = window.userProfile.deviceId;
 
-      // 保存済みメールアドレスの復元
       const savedEmail = localStorage.getItem('tool_nav_order_email_v3') || '';
       const emailInput = document.getElementById('setting-order-email');
       if (emailInput) emailInput.value = savedEmail;
@@ -1545,6 +1604,33 @@
       });
     }
 
+    // 【1. 貸出選択時の処理】
+    function handleQrChoiceBorrow() {
+      if (!window.currentScannedTool) return;
+      const tool = window.currentScannedTool;
+      closeQrChoiceModal();
+
+      if (tool.status === 'ordering') {
+        showToast(`この工具は現在 [注文中] です。届いた後に受取完了を行ってください。`, 'warning');
+        return;
+      }
+      handleQuickBorrow(tool.id);
+    }
+
+    // 【2. 返却選択時の処理】
+    function handleQrChoiceReturn() {
+      if (!window.currentScannedTool) return;
+      const tool = window.currentScannedTool;
+      closeQrChoiceModal();
+
+      if (tool.status === 'ordering') {
+        showToast(`この工具は現在 [注文中] です。`, 'warning');
+        return;
+      }
+      handleQuickReturn(tool.id);
+    }
+
+    // 【3. 購入選択時の処理】
     function handleQrChoicePurchase() {
       if (!window.currentScannedTool) return;
       const tool = window.currentScannedTool;
@@ -1571,7 +1657,6 @@
             timestamp: formattedDate
           });
 
-          // 設定されたデフォルト宛先を取得
           const defaultRecipient = localStorage.getItem('tool_nav_order_email_v3') || '';
 
           const subject = encodeURIComponent(`【工具発注依頼】${tool.name} (ID: ${tool.id})`);
@@ -1665,30 +1750,6 @@
 
     function closeQrChoiceModal() {
       document.getElementById('qr-choice-modal').classList.add('hidden');
-    }
-
-    function handleQrChoiceBorrowReturn() {
-      if (!window.currentScannedTool) return;
-      closeQrChoiceModal();
-
-      const tool = window.currentScannedTool;
-
-      if (tool.status === 'ordering') {
-        showToast(`この工具は現在 [注文中] です。届いた後に受取完了を行ってください。`, 'warning');
-        return;
-      }
-
-      if (!tool.isBorrowed) {
-        handleQuickBorrow(tool.id);
-      } else {
-        handleQuickReturn(tool.id);
-      }
-    }
-
-    function handleQrChoiceSearch() {
-      if (!window.currentScannedTool) return;
-      closeQrChoiceModal();
-      showStatusDetailModal(window.currentScannedTool);
     }
 
     async function handleQuickBorrow(toolId) {
@@ -1843,47 +1904,127 @@
       });
     }
 
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toast-container');
-      if (!container) return;
-
-      const toast = document.createElement('div');
-      let bg = 'bg-slate-800 text-white';
-      if (type === 'success') bg = 'bg-emerald-600 text-white';
-      else if (type === 'warning') bg = 'bg-amber-600 text-white';
-      else if (type === 'error') bg = 'bg-rose-600 text-white';
-
-      toast.className = `${bg} p-3 rounded-xl shadow-xl text-xs font-bold transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto flex items-center justify-between`;
-      toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()" class="ml-2 text-white/80 hover:text-white"><i class="fa-solid fa-xmark"></i></button>`;
-
-      container.appendChild(toast);
-
-      setTimeout(() => {
-        toast.classList.remove('translate-y-2', 'opacity-0');
-      }, 10);
-
-      setTimeout(() => {
-        toast.classList.add('opacity-0');
-        setTimeout(() => toast.remove(), 300);
-      }, 3500);
+    function renderCategoryTable() {
+      const tbody = document.getElementById('category-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = window.categories.map(cat => {
+        const count = window.tools.filter(t => t.category === cat).length;
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="p-3 font-medium text-slate-800">${cat}</td>
+            <td class="p-3 text-center text-slate-500 font-mono">${count}</td>
+            <td class="p-3 text-right">
+              <button onclick="handleDeleteCategory('${cat}')" class="text-rose-600 hover:text-rose-800 text-xs font-bold">削除</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
-    function showConfirmModal(title, message, callback) {
-      document.getElementById('confirm-modal-title').innerText = title;
-      document.getElementById('confirm-modal-message').innerText = message;
-      window.confirmCallback = callback;
+    function renderLocationTable() {
+      const tbody = document.getElementById('location-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = window.locations.map(loc => {
+        const count = window.tools.filter(t => t.location === loc).length;
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="p-3 font-medium text-slate-800">${loc}</td>
+            <td class="p-3 text-center text-slate-500 font-mono">${count}</td>
+            <td class="p-3 text-right">
+              <button onclick="handleDeleteLocation('${loc}')" class="text-rose-600 hover:text-rose-800 text-xs font-bold">削除</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
 
-      const okBtn = document.getElementById('confirm-modal-ok');
-      okBtn.onclick = () => {
-        closeConfirmModal();
-        if (window.confirmCallback) window.confirmCallback();
+    async function handleAddCategory(e) {
+      e.preventDefault();
+      const input = document.getElementById('new-category-input');
+      const val = input?.value.trim();
+      if (val && !window.categories.includes(val)) {
+        const updated = [...window.categories, val];
+        await window.dbSaveCategories(updated);
+        input.value = '';
+        showToast(`カテゴリ「${val}」を追加しました`, 'success');
+      }
+    }
+
+    async function handleDeleteCategory(cat) {
+      if (window.categories.length <= 1) {
+        showToast('カテゴリは最低1つ必要です', 'warning');
+        return;
+      }
+      showConfirmModal('カテゴリ削除', `カテゴリ「${cat}」を削除しますか？`, async () => {
+        const updated = window.categories.filter(c => c !== cat);
+        await window.dbSaveCategories(updated);
+        showToast(`カテゴリ「${cat}」を削除しました`, 'info');
+      });
+    }
+
+    async function handleAddLocation(e) {
+      e.preventDefault();
+      const input = document.getElementById('new-location-input');
+      const val = input?.value.trim();
+      if (val && !window.locations.includes(val)) {
+        const updated = [...window.locations, val];
+        await window.dbSaveLocations(updated);
+        input.value = '';
+        showToast(`保管場所「${val}」を追加しました`, 'success');
+      }
+    }
+
+    async function handleDeleteLocation(loc) {
+      if (window.locations.length <= 1) {
+        showToast('保管場所は最低1つ必要です', 'warning');
+        return;
+      }
+      showConfirmModal('保管場所削除', `保管場所「${loc}」を削除しますか？`, async () => {
+        const updated = window.locations.filter(l => l !== loc);
+        await window.dbSaveLocations(updated);
+        showToast(`保管場所「${loc}」を削除しました`, 'info');
+      });
+    }
+
+    async function handleAddTool(e) {
+      e.preventDefault();
+      const name = document.getElementById('new-tool-name')?.value.trim();
+      const maker = document.getElementById('new-tool-maker')?.value.trim();
+      const model = document.getElementById('new-tool-model')?.value.trim();
+      const category = document.getElementById('new-tool-category')?.value;
+      const location = document.getElementById('new-tool-location')?.value;
+      const id = document.getElementById('new-tool-id')?.value.trim();
+
+      if (!name || !id) {
+        showToast('工具名と工具IDは必須項目です', 'warning');
+        return;
+      }
+
+      const existing = window.tools.find(t => t.id === id);
+      if (existing) {
+        showToast(`工具ID「${id}」は既に登録されています`, 'error');
+        return;
+      }
+
+      const newTool = {
+        id,
+        name,
+        maker: maker || '',
+        model: model || '',
+        category: category || window.categories[0],
+        location: location || window.locations[0],
+        status: 'available',
+        isBorrowed: false,
+        borrowedBy: null,
+        borrowedByName: null,
+        borrowedAt: null
       };
 
-      document.getElementById('confirm-modal').classList.remove('hidden');
-    }
+      await window.dbSaveTool(newTool);
+      showToast(`🎉 工具「${name}」を登録しました！`, 'success');
 
-    function closeConfirmModal() {
-      document.getElementById('confirm-modal').classList.add('hidden');
+      document.getElementById('add-tool-form')?.reset();
+      autoGenerateToolId();
     }
   </script>
 </body>
