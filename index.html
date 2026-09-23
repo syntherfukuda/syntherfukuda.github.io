@@ -460,7 +460,7 @@
     </div>
   </div>
 
-  <!-- 【復元・修正】QRコードスキャン初回読み込み時の操作選択モーダル（貸出・返却・購入の3項目） -->
+  <!-- QRコードスキャン時の3つの操作選択モーダル（修正版：貸出(自動判定)、探す、購入） -->
   <div id="qr-choice-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
       <div class="text-center mb-4">
@@ -472,35 +472,35 @@
       <p class="text-xs text-slate-600 text-center mb-4 font-medium">どのような操作を行いますか？</p>
 
       <div class="space-y-2.5">
-        <!-- 1. 貸出項目 -->
-        <button onclick="handleQrChoiceBorrow()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
+        <!-- 1. 貸出項目 (自分のスマホIDで借りていれば返却、そうでなければ貸出になる) -->
+        <button id="qr-choice-btn-borrow-return" onclick="handleQrChoiceBorrowOrReturn()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
-              <i class="fa-solid fa-hand-holding"></i>
+            <div id="qr-choice-icon-bg" class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
+              <i id="qr-choice-main-icon" class="fa-solid fa-hand-holding"></i>
             </div>
             <div>
-              <div class="font-bold text-sm">貸出（借りる）</div>
-              <div class="text-[10px] text-blue-100">この工具を使用・持ち出します</div>
+              <div id="qr-choice-main-title" class="font-bold text-sm">貸出（借りる）</div>
+              <div id="qr-choice-main-desc" class="text-[10px] text-blue-100">この工具を持ち出します / 貸出登録</div>
             </div>
           </div>
-          <i class="fa-solid fa-chevron-right text-xs text-blue-200 group-hover:translate-x-1 transition-transform"></i>
+          <i class="fa-solid fa-chevron-right text-xs opacity-70 group-hover:translate-x-1 transition-transform"></i>
         </button>
 
-        <!-- 2. 返却項目 -->
-        <button onclick="handleQrChoiceReturn()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
+        <!-- 2. 探す項目 (返却場所になかった場合に所有者や保管場所を確認) -->
+        <button onclick="handleQrChoiceFind()" class="w-full bg-amber-500 hover:bg-amber-600 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
-              <i class="fa-solid fa-rotate-left"></i>
+              <i class="fa-solid fa-magnifying-glass-location"></i>
             </div>
             <div>
-              <div class="font-bold text-sm">返却（返す）</div>
-              <div class="text-[10px] text-emerald-100">定位置の保管場所に返却します</div>
+              <div class="font-bold text-sm">探す（持っている人を確認）</div>
+              <div class="text-[10px] text-amber-100">返却場所にない場合、現在誰が持っているかを検索</div>
             </div>
           </div>
-          <i class="fa-solid fa-chevron-right text-xs text-emerald-200 group-hover:translate-x-1 transition-transform"></i>
+          <i class="fa-solid fa-chevron-right text-xs opacity-70 group-hover:translate-x-1 transition-transform"></i>
         </button>
 
-        <!-- 3. 購入項目 -->
+        <!-- 3. 購入項目 (そのまま) -->
         <button onclick="handleQrChoicePurchase()" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg">
@@ -511,7 +511,7 @@
               <div class="text-[10px] text-purple-100">発注情報をメールに書き出し注文中に変更</div>
             </div>
           </div>
-          <i class="fa-solid fa-chevron-right text-xs text-purple-200 group-hover:translate-x-1 transition-transform"></i>
+          <i class="fa-solid fa-chevron-right text-xs opacity-70 group-hover:translate-x-1 transition-transform"></i>
         </button>
       </div>
 
@@ -525,7 +525,7 @@
     <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
       <div class="flex justify-between items-center pb-3 border-b border-slate-100">
         <h3 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-          <i class="fa-solid fa-circle-info text-blue-600"></i> 工具の貸借・注文状況
+          <i class="fa-solid fa-circle-info text-blue-600"></i> 工具の貸借・所有者情報
         </h3>
         <button onclick="closeStatusDetailModal()" class="text-slate-400 hover:text-slate-600 text-sm">
           <i class="fa-solid fa-xmark"></i>
@@ -539,7 +539,7 @@
           <div id="detail-tool-id" class="text-[10px] font-mono text-slate-400 mb-2">ID: ---</div>
           
           <div class="flex justify-between items-center text-xs">
-            <span class="text-slate-500">保管場所:</span>
+            <span class="text-slate-500">定位置 (保管場所):</span>
             <span id="detail-tool-location" class="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">---</span>
           </div>
         </div>
@@ -1604,8 +1604,8 @@
       });
     }
 
-    // 【1. 貸出選択時の処理】
-    function handleQrChoiceBorrow() {
+    // 【1. 貸出 / 返却（自動判定）選択時の処理】
+    function handleQrChoiceBorrowOrReturn() {
       if (!window.currentScannedTool) return;
       const tool = window.currentScannedTool;
       closeQrChoiceModal();
@@ -1614,20 +1614,25 @@
         showToast(`この工具は現在 [注文中] です。届いた後に受取完了を行ってください。`, 'warning');
         return;
       }
-      handleQuickBorrow(tool.id);
+
+      // スマホのIDが借りていれば返却、そうでなければ借りる
+      const isMyBorrowed = (tool.isBorrowed && tool.borrowedBy === window.userProfile.deviceId);
+      
+      if (isMyBorrowed) {
+        handleQuickReturn(tool.id);
+      } else {
+        handleQuickBorrow(tool.id);
+      }
     }
 
-    // 【2. 返却選択時の処理】
-    function handleQrChoiceReturn() {
+    // 【2. 探す選択時の処理（返却場所になかった場合に誰が持っているか確認）】
+    function handleQrChoiceFind() {
       if (!window.currentScannedTool) return;
       const tool = window.currentScannedTool;
       closeQrChoiceModal();
 
-      if (tool.status === 'ordering') {
-        showToast(`この工具は現在 [注文中] です。`, 'warning');
-        return;
-      }
-      handleQuickReturn(tool.id);
+      // 所持者・保管場所の状況を表示する詳細ダイアログを開く
+      showStatusDetailModal(tool);
     }
 
     // 【3. 購入選択時の処理】
@@ -1745,6 +1750,25 @@
         badge.innerText = "保管中 (貸出可能)";
       }
 
+      // 【自動判定】このスマホ端末のIDで借りている場合のみ「返却」、それ以外は「貸出」
+      const isMyBorrowed = (tool.isBorrowed && tool.borrowedBy === window.userProfile.deviceId);
+      const mainBtn = document.getElementById('qr-choice-btn-borrow-return');
+      const mainTitle = document.getElementById('qr-choice-main-title');
+      const mainDesc = document.getElementById('qr-choice-main-desc');
+      const mainIcon = document.getElementById('qr-choice-main-icon');
+
+      if (isMyBorrowed) {
+        mainBtn.className = "w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group";
+        mainTitle.innerText = "返却（返す）";
+        mainDesc.innerText = "あなたが借りている工具を返却します";
+        mainIcon.className = "fa-solid fa-rotate-left";
+      } else {
+        mainBtn.className = "w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl flex items-center justify-between text-left shadow transition group";
+        mainTitle.innerText = "貸出（借りる）";
+        mainDesc.innerText = tool.isBorrowed ? `現在【${tool.borrowedByName || '他の作業員'}】が貸出中ですが借りる` : "この工具を持ち出します / 貸出登録";
+        mainIcon.className = "fa-solid fa-hand-holding";
+      }
+
       document.getElementById('qr-choice-modal').classList.remove('hidden');
     }
 
@@ -1827,18 +1851,25 @@
         actionBtn.className = "flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-xl text-xs font-bold shadow";
         actionBtn.onclick = () => { closeStatusDetailModal(); resolveOrderingStatus(tool.id); };
       } else if (tool.isBorrowed) {
+        const isMe = tool.borrowedBy === window.userProfile.deviceId;
         box.className = "p-3 rounded-xl text-xs space-y-1 border bg-amber-50 border-amber-200 text-amber-800";
         box.innerHTML = `
           <div class="font-bold flex items-center gap-1"><i class="fa-solid fa-hand-holding"></i> 状態: 貸出中</div>
-          <div>借り手: ${tool.borrowedByName || '不明'}</div>
+          <div>持っている人: <strong class="text-amber-900">${tool.borrowedByName || '不明'}</strong> ${isMe ? ' (あなた)' : ''}</div>
           <div>貸出日時: ${tool.borrowedAt || '---'}</div>
         `;
-        actionBtn.innerText = "返却する";
-        actionBtn.className = "flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-xl text-xs font-bold shadow";
-        actionBtn.onclick = () => { closeStatusDetailModal(); handleQuickReturn(tool.id); };
+        if (isMe) {
+          actionBtn.innerText = "返却する";
+          actionBtn.className = "flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-xl text-xs font-bold shadow";
+          actionBtn.onclick = () => { closeStatusDetailModal(); handleQuickReturn(tool.id); };
+        } else {
+          actionBtn.innerText = "自分に借り換える";
+          actionBtn.className = "flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-bold shadow";
+          actionBtn.onclick = () => { closeStatusDetailModal(); handleQuickBorrow(tool.id); };
+        }
       } else {
         box.className = "p-3 rounded-xl text-xs space-y-1 border bg-emerald-50 border-emerald-200 text-emerald-800";
-        box.innerHTML = `<div class="font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> 状態: 保管中 (貸出可能)</div>`;
+        box.innerHTML = `<div class="font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> 状態: 保管中 (棚にあります)</div>`;
         actionBtn.innerText = "この工具を借りる";
         actionBtn.className = "flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-bold shadow";
         actionBtn.onclick = () => { closeStatusDetailModal(); handleQuickBorrow(tool.id); };
@@ -1852,90 +1883,23 @@
       document.getElementById('status-detail-modal').classList.add('hidden');
     }
 
-    function switchToBorrowActionFromDetail() {
-      if (window.selectedToolForEdit) {
-        const id = window.selectedToolForEdit.id;
-        closeStatusDetailModal();
-        handleQuickBorrow(id);
-      }
-    }
-
-    function renderHistory() {
-      const container = document.getElementById('history-list');
-      if (!container) return;
-
-      if (window.historyLogs.length === 0) {
-        container.innerHTML = `
-          <div class="text-center py-8 text-slate-400 text-xs">
-            <i class="fa-solid fa-clock-rotate-left text-2xl opacity-30 mb-1"></i>
-            <p>まだ操作履歴がありません。</p>
-          </div>
-        `;
-        return;
-      }
-
-      container.innerHTML = '';
-      window.historyLogs.forEach(log => {
-        let actBadge = '';
-        if (log.action === 'borrow') {
-          actBadge = `<span class="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-hand-holding mr-1"></i>貸出</span>`;
-        } else if (log.action === 'return') {
-          actBadge = `<span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-rotate-left mr-1"></i>返却</span>`;
-        } else if (log.action === 'order') {
-          actBadge = `<span class="bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-cart-shopping mr-1"></i>注文作成</span>`;
-        } else if (log.action === 'received') {
-          actBadge = `<span class="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-[10px]"><i class="fa-solid fa-box-archive mr-1"></i>受取完了</span>`;
-        } else {
-          actBadge = `<span class="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">状態変更</span>`;
-        }
-
-        container.insertAdjacentHTML('beforeend', `
-          <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs flex justify-between items-center">
-            <div class="space-y-0.5">
-              <div class="flex items-center gap-2">
-                ${actBadge}
-                <span class="font-bold text-slate-800">${log.toolName}</span>
-              </div>
-              <div class="text-[10px] text-slate-500">操作者: <span class="font-medium text-slate-700">${log.userName || '不明'}</span></div>
-            </div>
-            <div class="text-[10px] font-mono text-slate-400 text-right">${log.timestamp || ''}</div>
-          </div>
-        `);
-      });
-    }
-
     function renderCategoryTable() {
       const tbody = document.getElementById('category-table-body');
       if (!tbody) return;
-      tbody.innerHTML = window.categories.map(cat => {
-        const count = window.tools.filter(t => t.category === cat).length;
-        return `
+
+      tbody.innerHTML = '';
+      window.categories.forEach((cat) => {
+        const toolCount = window.tools.filter(t => t.category === cat).length;
+        tbody.insertAdjacentHTML('beforeend', `
           <tr class="hover:bg-slate-50">
             <td class="p-3 font-medium text-slate-800">${cat}</td>
-            <td class="p-3 text-center text-slate-500 font-mono">${count}</td>
+            <td class="p-3 text-center text-slate-500">${toolCount} 件</td>
             <td class="p-3 text-right">
-              <button onclick="handleDeleteCategory('${cat}')" class="text-rose-600 hover:text-rose-800 text-xs font-bold">削除</button>
+              <button onclick="deleteCategory('${cat}')" class="text-rose-600 hover:text-rose-800 font-medium text-xs">削除</button>
             </td>
           </tr>
-        `;
-      }).join('');
-    }
-
-    function renderLocationTable() {
-      const tbody = document.getElementById('location-table-body');
-      if (!tbody) return;
-      tbody.innerHTML = window.locations.map(loc => {
-        const count = window.tools.filter(t => t.location === loc).length;
-        return `
-          <tr class="hover:bg-slate-50">
-            <td class="p-3 font-medium text-slate-800">${loc}</td>
-            <td class="p-3 text-center text-slate-500 font-mono">${count}</td>
-            <td class="p-3 text-right">
-              <button onclick="handleDeleteLocation('${loc}')" class="text-rose-600 hover:text-rose-800 text-xs font-bold">削除</button>
-            </td>
-          </tr>
-        `;
-      }).join('');
+        `);
+      });
     }
 
     async function handleAddCategory(e) {
@@ -1943,22 +1907,41 @@
       const input = document.getElementById('new-category-input');
       const val = input?.value.trim();
       if (val && !window.categories.includes(val)) {
-        const updated = [...window.categories, val];
-        await window.dbSaveCategories(updated);
+        window.categories.push(val);
+        await window.dbSaveCategories(window.categories);
         input.value = '';
-        showToast(`カテゴリ「${val}」を追加しました`, 'success');
+        showToast(`カテゴリ「${val}」を追加しました。`, 'success');
       }
     }
 
-    async function handleDeleteCategory(cat) {
+    async function deleteCategory(cat) {
       if (window.categories.length <= 1) {
-        showToast('カテゴリは最低1つ必要です', 'warning');
+        showToast('最低1つのカテゴリが必要です。', 'warning');
         return;
       }
       showConfirmModal('カテゴリ削除', `カテゴリ「${cat}」を削除しますか？`, async () => {
-        const updated = window.categories.filter(c => c !== cat);
-        await window.dbSaveCategories(updated);
-        showToast(`カテゴリ「${cat}」を削除しました`, 'info');
+        window.categories = window.categories.filter(c => c !== cat);
+        await window.dbSaveCategories(window.categories);
+        showToast(`カテゴリを削除しました。`, 'info');
+      });
+    }
+
+    function renderLocationTable() {
+      const tbody = document.getElementById('location-table-body');
+      if (!tbody) return;
+
+      tbody.innerHTML = '';
+      window.locations.forEach((loc) => {
+        const toolCount = window.tools.filter(t => t.location === loc).length;
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr class="hover:bg-slate-50">
+            <td class="p-3 font-medium text-slate-800">${loc}</td>
+            <td class="p-3 text-center text-slate-500">${toolCount} 件</td>
+            <td class="p-3 text-right">
+              <button onclick="deleteLocation('${loc}')" class="text-rose-600 hover:text-rose-800 font-medium text-xs">削除</button>
+            </td>
+          </tr>
+        `);
       });
     }
 
@@ -1967,22 +1950,22 @@
       const input = document.getElementById('new-location-input');
       const val = input?.value.trim();
       if (val && !window.locations.includes(val)) {
-        const updated = [...window.locations, val];
-        await window.dbSaveLocations(updated);
+        window.locations.push(val);
+        await window.dbSaveLocations(window.locations);
         input.value = '';
-        showToast(`保管場所「${val}」を追加しました`, 'success');
+        showToast(`保管場所「${val}」を追加しました。`, 'success');
       }
     }
 
-    async function handleDeleteLocation(loc) {
+    async function deleteLocation(loc) {
       if (window.locations.length <= 1) {
-        showToast('保管場所は最低1つ必要です', 'warning');
+        showToast('最低1つの保管場所が必要です。', 'warning');
         return;
       }
-      showConfirmModal('保管場所削除', `保管場所「${loc}」を削除しますか？`, async () => {
-        const updated = window.locations.filter(l => l !== loc);
-        await window.dbSaveLocations(updated);
-        showToast(`保管場所「${loc}」を削除しました`, 'info');
+      showConfirmModal('保管場所の削除', `保管場所「${loc}」を削除しますか？`, async () => {
+        window.locations = window.locations.filter(l => l !== loc);
+        await window.dbSaveLocations(window.locations);
+        showToast(`保管場所を削除しました。`, 'info');
       });
     }
 
@@ -1993,38 +1976,73 @@
       const model = document.getElementById('new-tool-model')?.value.trim();
       const category = document.getElementById('new-tool-category')?.value;
       const location = document.getElementById('new-tool-location')?.value;
-      const id = document.getElementById('new-tool-id')?.value.trim();
+      let id = document.getElementById('new-tool-id')?.value.trim();
 
       if (!name || !id) {
-        showToast('工具名と工具IDは必須項目です', 'warning');
+        showToast('工具名とIDを入力してください。', 'warning');
         return;
       }
 
-      const existing = window.tools.find(t => t.id === id);
-      if (existing) {
-        showToast(`工具ID「${id}」は既に登録されています`, 'error');
-        return;
+      if (window.tools.some(t => t.id === id)) {
+        id = id + '-' + Math.floor(10 + Math.random() * 90);
       }
 
       const newTool = {
         id,
         name,
-        maker: maker || '',
-        model: model || '',
-        category: category || window.categories[0],
-        location: location || window.locations[0],
-        status: 'available',
+        maker,
+        model,
+        category,
+        location,
         isBorrowed: false,
+        status: 'available',
         borrowedBy: null,
         borrowedByName: null,
         borrowedAt: null
       };
 
       await window.dbSaveTool(newTool);
-      showToast(`🎉 工具「${name}」を登録しました！`, 'success');
+      showToast(`工具「${name}」を新規登録しました！`, 'success');
 
-      document.getElementById('add-tool-form')?.reset();
-      autoGenerateToolId();
+      document.getElementById('add-tool-form').reset();
+      window.autoGenerateToolId();
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('history-list');
+      if (!container) return;
+
+      if (!window.historyLogs || window.historyLogs.length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs">履歴ログはまだありません</div>`;
+        return;
+      }
+
+      container.innerHTML = '';
+      window.historyLogs.forEach(log => {
+        let actionBadge = '';
+        if (log.action === 'borrow') {
+          actionBadge = `<span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">貸出</span>`;
+        } else if (log.action === 'return') {
+          actionBadge = `<span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded">返却</span>`;
+        } else if (log.action === 'order') {
+          actionBadge = `<span class="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded">注文</span>`;
+        } else if (log.action === 'received') {
+          actionBadge = `<span class="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded">受取</span>`;
+        }
+
+        container.insertAdjacentHTML('beforeend', `
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs flex justify-between items-center">
+            <div class="space-y-0.5">
+              <div class="flex items-center gap-2">
+                ${actionBadge}
+                <span class="font-bold text-slate-800">${log.toolName || '工具'}</span>
+              </div>
+              <div class="text-[10px] text-slate-500">作業者: <span class="font-medium text-slate-700">${log.userName || '不明'}</span> (${log.deviceId || ''})</div>
+            </div>
+            <div class="text-[10px] font-mono text-slate-400 whitespace-nowrap">${log.timestamp || ''}</div>
+          </div>
+        `);
+      });
     }
   </script>
 </body>
