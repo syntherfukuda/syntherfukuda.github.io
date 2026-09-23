@@ -1,0 +1,1 @@
+# syntherfukuda.github.io
